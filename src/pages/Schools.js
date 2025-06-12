@@ -161,34 +161,50 @@ const Schools = () => {
       return
     }
 
-    if (parseFloat(newCommission.commission_rate) < 0) {
-      toast.error('Commission amount must be greater than or equal to 0')
+    const commissionAmount = parseFloat(newCommission.commission_rate)
+    if (isNaN(commissionAmount) || commissionAmount < 0 || commissionAmount > 1000000) {
+      toast.error('Commission amount must be between ₹0 and ₹10,00,000')
       return
     }
 
     try {
+      // First verify the school and product exist
+      const { data: existingCommission, error: checkError } = await supabase
+        .from('commissions')
+        .select('id')
+        .eq('school_id', selectedSchool.id)
+        .eq('product_id', newCommission.product_id)
+        .single()
+
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 means no rows returned
+        throw checkError
+      }
+
+      if (existingCommission) {
+        toast.error('Commission already exists for this product')
+        return
+      }
+
+      // Create the commission
       const { error } = await supabase
         .from('commissions')
         .insert({
           school_id: selectedSchool.id,
           product_id: newCommission.product_id,
-          commission_rate: parseFloat(newCommission.commission_rate) // No need to divide by 100 anymore
+          commission_rate: commissionAmount
         })
 
       if (error) {
-        if (error.code === '23505') { // Unique constraint violation
-          toast.error('Commission already exists for this product')
-        } else {
-          throw error
-        }
-      } else {
-        toast.success('Commission added successfully')
-        setNewCommission({ product_id: '', commission_rate: '' })
-        await fetchSchoolCommissions(selectedSchool.id)
-        await fetchAllCommissions()
+        throw error
       }
+
+      toast.success('Commission added successfully')
+      setNewCommission({ product_id: '', commission_rate: '' })
+      await fetchSchoolCommissions(selectedSchool.id)
+      await fetchAllCommissions()
     } catch (error) {
-      toast.error('Failed to add commission')
+      console.error('Error adding commission:', error)
+      toast.error(error.message || 'Failed to add commission')
     }
   }
 
@@ -404,12 +420,14 @@ const Schools = () => {
                           type="number"
                           step="0.01"
                           min="0"
+                          max="1000000"
                           className="input pl-8"
                           placeholder="e.g., 50"
                           value={newCommission.commission_rate}
                           onChange={(e) => setNewCommission({ ...newCommission, commission_rate: e.target.value })}
                         />
                       </div>
+                      <p className="text-xs text-gray-500 mt-1">Enter amount between ₹0 and ₹10,00,000</p>
                     </div>
                     <div className="flex items-end">
                       <button
