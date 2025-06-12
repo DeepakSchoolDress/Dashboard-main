@@ -123,6 +123,13 @@ const Sales = () => {
 
       if (saleError) throw saleError
 
+      // Prepare sale data for printing
+      const saleForPrint = {
+        ...sale,
+        schools: selectedSchool,
+        sale_items: []
+      }
+
       // Create sale items and update stock
       for (const item of cart) {
         // Check if this item should be commissioned
@@ -151,6 +158,16 @@ const Sales = () => {
 
         if (itemError) throw itemError
 
+        // Add to print data
+        saleForPrint.sale_items.push({
+          quantity: item.quantity,
+          unit_price: item.product.selling_price,
+          is_commissioned,
+          products: {
+            name: item.product.name
+          }
+        })
+
         // Update product stock
         const { error: stockError } = await supabase
           .from('products')
@@ -163,6 +180,12 @@ const Sales = () => {
       }
 
       toast.success('Sale created successfully!')
+      
+      // Ask user if they want to print the bill
+      if (window.confirm('Sale completed! Would you like to print the bill?')) {
+        printBill(saleForPrint)
+      }
+      
       dispatch(clearCart())
       dispatch(setCustomerName('Cash'))
       dispatch(setSelectedSchool(null))
@@ -177,6 +200,104 @@ const Sales = () => {
     } finally {
       setLoading(false)
     }
+  }
+
+  const printBill = (sale) => {
+    const totalAmount = parseFloat(sale.total_amount)
+    const amountPaid = parseFloat(sale.amount_paid || sale.total_amount)
+    const discount = totalAmount - amountPaid
+    
+    // Calculate total items
+    const totalItems = sale.sale_items?.reduce((total, item) => total + item.quantity, 0) || 0
+    
+    // Format date safely
+    const saleDate = new Date(sale.created_at)
+    const formattedDate = saleDate.toLocaleDateString('en-GB')
+    const formattedTime = saleDate.toLocaleTimeString('en-GB', { 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      hour12: false 
+    })
+    
+    // Build plain text receipt
+    let receipt = ''
+    receipt += '        DEEPAK SCHOOL DRESS\n'
+    receipt += '       CHOWK BAZAAR KAIRANA\n'
+    receipt += '================================\n'
+    receipt += `Date: ${formattedDate} ${formattedTime}\n`
+    receipt += `Customer: ${sale.customer_name}\n`
+    
+    if (sale.schools) {
+      receipt += `School: ${sale.schools.name}\n`
+    }
+    
+    receipt += '================================\n'
+    
+    // Add items
+    if (sale.sale_items && sale.sale_items.length > 0) {
+      sale.sale_items.forEach(item => {
+        const itemName = item.products.name || 'Unknown Item'
+        const quantity = item.quantity || 0
+        const unitPrice = parseFloat(item.unit_price) || 0
+        const itemTotal = quantity * unitPrice
+        
+        receipt += `${itemName}\n`
+        receipt += `${quantity} x Rs.${unitPrice.toFixed(2)}`.padEnd(20) + `Rs.${itemTotal.toFixed(2)}\n`
+      })
+    }
+    
+    receipt += '================================\n'
+    receipt += `Total Items: ${totalItems}\n`
+    receipt += `Subtotal: Rs.${totalAmount.toFixed(2)}\n`
+    
+    if (discount > 0) {
+      receipt += `Discount: -Rs.${discount.toFixed(2)}\n`
+    }
+    
+    receipt += `TOTAL: Rs.${amountPaid.toFixed(2)}\n`
+    receipt += '================================\n'
+    receipt += '     Thank you for your business!\n'
+    receipt += '        Please visit again\n'
+    
+    // Create print window with plain text
+    const printWindow = window.open('', '_blank', 'width=400,height=600')
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Receipt</title>
+        <style>
+          body {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.2;
+            margin: 10px;
+            white-space: pre-wrap;
+            background: white;
+            color: black;
+          }
+          @media print {
+            body { margin: 0; }
+          }
+        </style>
+      </head>
+      <body>${receipt}</body>
+      <script>
+        window.onload = function() {
+          setTimeout(function() {
+            window.print();
+            window.onafterprint = function() {
+              window.close();
+            };
+          }, 1000);
+        };
+      </script>
+      </html>
+    `)
+    
+    printWindow.document.close()
   }
 
   return (
