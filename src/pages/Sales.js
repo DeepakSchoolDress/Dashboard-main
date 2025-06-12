@@ -327,8 +327,8 @@ const Sales = () => {
             }
             
             .receipt-content {
-              filter: contrast(400%) brightness(0.6);
-              -webkit-filter: contrast(400%) brightness(0.6);
+              filter: contrast(400%) brightness(0.4);
+              -webkit-filter: contrast(400%) brightness(0.4);
             }
             
             * {
