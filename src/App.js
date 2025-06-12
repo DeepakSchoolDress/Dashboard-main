@@ -9,6 +9,8 @@ import Products from './pages/Products'
 import Schools from './pages/Schools'
 import Sales from './pages/Sales'
 import SalesHistory from './pages/SalesHistory'
+import SchoolCommissions from './pages/SchoolCommissions'
+import SchoolCommissionsList from './pages/SchoolCommissionsList'
 
 function App() {
   return (
@@ -21,6 +23,8 @@ function App() {
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="products" element={<Products />} />
               <Route path="schools" element={<Schools />} />
+              <Route path="school-commissions" element={<SchoolCommissionsList />} />
+              <Route path="school-commissions/:schoolId" element={<SchoolCommissions />} />
               <Route path="sales" element={<Sales />} />
               <Route path="sales-history" element={<SalesHistory />} />
             </Route>

@@ -58,12 +58,10 @@ const Dashboard = () => {
             quantity,
             unit_price,
             is_commissioned,
+            product_id,
             products (
               id,
-              cost_price,
-              commissions (
-                commission_rate
-              )
+              cost_price
             )
           ),
           bill_cancellations (
@@ -74,6 +72,20 @@ const Dashboard = () => {
         .order('created_at', { ascending: false })
 
       if (salesError) throw salesError
+
+      // Get all commission rates
+      const { data: commissionsData, error: commissionsError } = await supabase
+        .from('commissions')
+        .select('school_id, product_id, commission_amount')
+
+      if (commissionsError) throw commissionsError
+
+      // Create commission lookup map
+      const commissionMap = {}
+      commissionsData.forEach(commission => {
+        const key = `${commission.school_id}_${commission.product_id}`
+        commissionMap[key] = commission.commission_amount
+      })
 
       const currentDate = new Date()
       const currentMonth = currentDate.getMonth()
@@ -87,43 +99,28 @@ const Dashboard = () => {
       const schoolCommissions = {}
       const activeSchools = new Set()
 
-      // Process each sale (excluding cancelled ones)
       salesData.forEach(sale => {
         // Skip cancelled sales
-        if (sale.bill_cancellations && sale.bill_cancellations.length > 0) {
-          return
-        }
+        if (sale.bill_cancellations?.length) return
 
-        if (!sale.sale_items) return // Skip if no items
-
-        const amountPaid = parseFloat(sale.amount_paid || sale.total_amount)
-        const totalAmount = parseFloat(sale.total_amount)
+        const amountPaid = parseFloat(sale.amount_paid || 0)
+        const totalAmount = parseFloat(sale.total_amount || 0)
         
-        // Add to revenue
         totalRevenue += amountPaid
-        
-        // Calculate discount
-        const discount = totalAmount - amountPaid
-        totalDiscounts += discount
+        totalDiscounts += totalAmount - amountPaid
 
-        // Process each item in the sale
         sale.sale_items.forEach(item => {
           if (!item.products) return // Skip if no product data
 
-          const itemTotal = item.quantity * item.unit_price
-          const itemProportion = itemTotal / totalAmount
-          const itemAmountPaid = amountPaid * itemProportion
+          const itemRevenue = item.quantity * amountPaid * (item.unit_price / totalAmount)
           const itemCost = item.quantity * item.products.cost_price
-          
-          // Add to profit
-          totalProfit += (itemAmountPaid - itemCost)
+          totalProfit += itemRevenue - itemCost
 
           // Calculate commission if applicable
-          if (item.is_commissioned && sale.school_id && 
-              item.products.commissions && 
-              item.products.commissions.length > 0) {
-            const commissionRate = item.products.commissions[0].commission_rate
-            const commissionAmount = commissionRate * item.quantity // Commission per unit * quantity
+          if (item.is_commissioned && sale.school_id) {
+            const commissionKey = `${sale.school_id}_${item.product_id}`
+            const commissionRate = commissionMap[commissionKey] || 0
+            const commissionAmount = commissionRate * item.quantity
             
             totalCommissions += commissionAmount
             

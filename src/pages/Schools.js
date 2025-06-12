@@ -64,49 +64,67 @@ const Schools = () => {
 
   const fetchSchoolEarnings = async () => {
     try {
-      // Calculate commission earnings from sales (excluding cancelled ones)
-      const { data, error } = await supabase
-        .from('sale_items')
+      // Get all sales with commissioned items and their commission data
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales')
         .select(`
-          quantity,
-          unit_price,
-          is_commissioned,
-          sales!inner (
-            school_id,
-            schools (id, name),
-            bill_cancellations (id)
+          id,
+          school_id,
+          schools (id, name),
+          sale_items!inner (
+            quantity,
+            unit_price,
+            is_commissioned,
+            product_id,
+            products (id, name)
           ),
-          products!inner (
-            id,
-            commissions (commission_rate)
-          )
+          bill_cancellations (id)
         `)
-        .eq('is_commissioned', true)
-      
-      if (error) throw error
+        .eq('sale_items.is_commissioned', true)
+        .not('school_id', 'is', null)
+
+      if (salesError) throw salesError
+
+      // Get all commission rates
+      const { data: commissionsData, error: commissionsError } = await supabase
+        .from('commissions')
+        .select('school_id, product_id, commission_amount')
+
+      if (commissionsError) throw commissionsError
+
+      // Create commission lookup map
+      const commissionMap = {}
+      commissionsData.forEach(commission => {
+        const key = `${commission.school_id}_${commission.product_id}`
+        commissionMap[key] = commission.commission_amount
+      })
 
       const earnings = {}
-      data?.forEach(item => {
+      salesData?.forEach(sale => {
         // Skip if sale is cancelled
-        if (item.sales.bill_cancellations && item.sales.bill_cancellations.length > 0) {
+        if (sale.bill_cancellations && sale.bill_cancellations.length > 0) {
           return
         }
 
-        const schoolId = item.sales.school_id
-        if (schoolId && item.products.commissions.length > 0) {
-          const commissionRate = item.products.commissions[0].commission_rate
-          const commissionAmount = commissionRate * item.quantity // Commission per unit * quantity
-          
-          if (!earnings[schoolId]) {
-            earnings[schoolId] = {
-              school_name: item.sales.schools.name,
-              total_commission: 0,
-              total_sales: 0
+        const schoolId = sale.school_id
+        if (schoolId && sale.schools) {
+          sale.sale_items.forEach(item => {
+            if (item.is_commissioned) {
+              const commissionKey = `${schoolId}_${item.product_id}`
+              const commissionRate = commissionMap[commissionKey] || 0
+              const commissionAmount = commissionRate * item.quantity
+
+              if (!earnings[schoolId]) {
+                earnings[schoolId] = {
+                  school_name: sale.schools.name,
+                  total_commission: 0,
+                  total_sales: 0
+                }
+              }
+              earnings[schoolId].total_commission += commissionAmount
+              earnings[schoolId].total_sales += (item.quantity * item.unit_price)
             }
-          }
-          earnings[schoolId].total_commission += commissionAmount
-          // For total_sales, we calculate based on the commission amount since it's more relevant
-          earnings[schoolId].total_sales += (item.quantity * item.unit_price)
+          })
         }
       })
       
@@ -197,7 +215,7 @@ const Schools = () => {
         .insert({
           school_id: selectedSchool.id,
           product_id: newCommission.product_id,
-          commission_rate: commissionAmount
+          commission_amount: commissionAmount
         })
 
       if (error) {
@@ -208,6 +226,7 @@ const Schools = () => {
       setNewCommission({ product_id: '', commission_rate: '' })
       await fetchSchoolCommissions(selectedSchool.id)
       await fetchAllCommissions()
+      await fetchSchoolEarnings()
     } catch (error) {
       console.error('Error adding commission:', error)
       toast.error(error.message || 'Failed to add commission')
@@ -227,6 +246,7 @@ const Schools = () => {
         toast.success('Commission removed successfully')
         await fetchSchoolCommissions(selectedSchool.id)
         await fetchAllCommissions()
+        await fetchSchoolEarnings()
       } catch (error) {
         toast.error('Failed to remove commission')
       }
@@ -472,7 +492,7 @@ const Schools = () => {
                                 <td className="font-semibold text-green-600">
                                   <span className="flex items-center">
                                     <IndianRupee className="w-4 h-4 mr-1" />
-                                    ₹{commission.commission_rate.toFixed(2)}
+                                    ₹{commission.commission_amount.toFixed(2)}
                                   </span>
                                 </td>
                                 <td>

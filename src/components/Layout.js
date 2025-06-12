@@ -7,7 +7,8 @@ import {
   ShoppingCart, 
   History,
   Menu,
-  X
+  X,
+  IndianRupee
 } from 'lucide-react'
 
 const Layout = () => {
@@ -18,6 +19,7 @@ const Layout = () => {
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Products', href: '/products', icon: Package },
     { name: 'Schools', href: '/schools', icon: School },
+    { name: 'School Commissions', href: '/school-commissions', icon: IndianRupee },
     { name: 'Sales', href: '/sales', icon: ShoppingCart },
     { name: 'Sales History', href: '/sales-history', icon: History },
   ]

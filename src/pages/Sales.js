@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { Plus, Minus, ShoppingCart, Trash2, Search, DollarSign, Percent } from 'lucide-react'
+import { Plus, Minus, ShoppingCart, Trash2, Search, DollarSign, Percent, Printer, Save } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { fetchProducts } from '../store/slices/productsSlice'
 import { fetchSchools } from '../store/slices/schoolsSlice'
@@ -23,10 +23,17 @@ const Sales = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(false)
   const [amountPaid, setAmountPaid] = useState('')
+  const [commissionRates, setCommissionRates] = useState({})
 
   const cartTotal = cart.reduce((total, item) => 
     total + (item.product.selling_price * item.quantity), 0
   )
+
+  // Calculate total commission for the cart
+  const cartCommission = cart.reduce((total, item) => {
+    const commissionAmount = commissionRates[item.product.id] || 0
+    return total + (commissionAmount * item.quantity)
+  }, 0)
 
   // Keep cartCost calculation for backend use but don't display it
   const cartCost = cart.reduce((total, item) => 
@@ -38,25 +45,52 @@ const Sales = () => {
     dispatch(fetchSchools())
   }, [dispatch])
 
-  // Update amount paid when cart total changes
+  // Fetch commission rates when school is selected
   useEffect(() => {
-    if (amountPaid === '' || parseFloat(amountPaid) === cartTotal) {
-      setAmountPaid(cartTotal.toString())
+    const fetchCommissionRates = async () => {
+      if (selectedSchool) {
+        const { data } = await supabase
+          .from('commissions')
+          .select('product_id, commission_amount')
+          .eq('school_id', selectedSchool.id)
+
+        if (data) {
+          const rates = data.reduce((acc, curr) => {
+            acc[curr.product_id] = curr.commission_amount || 0
+            return acc
+          }, {})
+          setCommissionRates(rates)
+        }
+      } else {
+        setCommissionRates({})
+      }
     }
-  }, [cartTotal, amountPaid])
+
+    fetchCommissionRates()
+  }, [selectedSchool])
+
+  // Update amount paid whenever cart total changes
+  useEffect(() => {
+    setAmountPaid(cartTotal.toString())
+  }, [cartTotal])
 
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const discount = cartTotal - parseFloat(amountPaid || 0)
-  // eslint-disable-next-line no-unused-vars
-  const profit = parseFloat(amountPaid || 0) - cartCost
+  const profit = parseFloat(amountPaid || 0) - cartCost - cartCommission
 
   const handleAddToCart = (product, quantity = 1) => {
     if (product.stock_quantity < quantity) {
-      toast.error('Insufficient stock available')
-      return
+      toast('Low stock: Only ' + product.stock_quantity + ' items available', {
+        icon: '⚠️',
+        style: {
+          background: '#fff7ed',
+          color: '#9a3412',
+          border: '1px solid #fdba74'
+        }
+      })
     }
     dispatch(addToCart({ product, quantity }))
     toast.success(`${product.name} added to cart`)
@@ -69,15 +103,21 @@ const Sales = () => {
     }
     
     const product = products.find(p => p.id === productId)
-    if (product && newQuantity > product.stock_quantity) {
-      toast.error('Insufficient stock available')
-      return
+    if (product && product.stock_quantity < newQuantity) {
+      toast('Low stock: Only ' + product.stock_quantity + ' items available', {
+        icon: '⚠️',
+        style: {
+          background: '#fff7ed',
+          color: '#9a3412',
+          border: '1px solid #fdba74'
+        }
+      })
     }
     
     dispatch(updateCartQuantity({ productId, quantity: newQuantity }))
   }
 
-  const handleCreateSale = async () => {
+  const handleCreateSale = async (shouldPrint = false) => {
     if (cart.length === 0) {
       toast.error('Cart is empty')
       return
@@ -96,19 +136,6 @@ const Sales = () => {
 
     setLoading(true)
     try {
-      // Check stock availability for all items
-      for (const item of cart) {
-        const { data: currentProduct } = await supabase
-          .from('products')
-          .select('stock_quantity')
-          .eq('id', item.product.id)
-          .single()
-
-        if (currentProduct.stock_quantity < item.quantity) {
-          throw new Error(`Insufficient stock for ${item.product.name}`)
-        }
-      }
-
       // Create the sale record with amount_paid
       const { data: sale, error: saleError } = await supabase
         .from('sales')
@@ -134,15 +161,17 @@ const Sales = () => {
       for (const item of cart) {
         // Check if this item should be commissioned
         let is_commissioned = false
+        let commission_amount = 0
         if (selectedSchool) {
           const { data: commission } = await supabase
             .from('commissions')
-            .select('id')
+            .select('commission_amount')
             .eq('school_id', selectedSchool.id)
             .eq('product_id', item.product.id)
             .single()
           
           is_commissioned = !!commission
+          commission_amount = commission?.commission_amount || 0
         }
 
         // Create sale item
@@ -153,7 +182,8 @@ const Sales = () => {
             product_id: item.product.id,
             quantity: item.quantity,
             unit_price: item.product.selling_price,
-            is_commissioned
+            is_commissioned,
+            commission_amount
           })
 
         if (itemError) throw itemError
@@ -163,12 +193,13 @@ const Sales = () => {
           quantity: item.quantity,
           unit_price: item.product.selling_price,
           is_commissioned,
+          commission_amount,
           products: {
             name: item.product.name
           }
         })
 
-        // Update product stock
+        // Update product stock (allow negative)
         const { error: stockError } = await supabase
           .from('products')
           .update({ 
@@ -181,8 +212,8 @@ const Sales = () => {
 
       toast.success('Sale created successfully!')
       
-      // Ask user if they want to print the bill
-      if (window.confirm('Sale completed! Would you like to print the bill?')) {
+      // Print if requested
+      if (shouldPrint) {
         printBill(saleForPrint)
       }
       
@@ -259,7 +290,7 @@ const Sales = () => {
     receipt += '     Thank you for your business!\n'
     receipt += '        Please visit again\n'
     
-    // Create print window with plain text
+    // Create print window with darker styling
     const printWindow = window.open('', '_blank', 'width=400,height=600')
     
     printWindow.document.write(`
@@ -271,19 +302,46 @@ const Sales = () => {
         <style>
           body {
             font-family: 'Courier New', monospace;
-            font-size: 12px;
-            line-height: 1.2;
+            font-size: 14px;
+            font-weight: bold;
+            line-height: 1.3;
             margin: 10px;
             white-space: pre-wrap;
             background: white;
-            color: black;
+            color: #000000;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
+          
+          .receipt-content {
+            filter: contrast(200%) brightness(0.8);
+            font-weight: 900;
+          }
+          
           @media print {
-            body { margin: 0; }
+            body { 
+              margin: 0; 
+              font-size: 12px;
+              font-weight: 900;
+              color: #000000 !important;
+            }
+            
+            .receipt-content {
+              filter: contrast(300%) brightness(0.7);
+              -webkit-filter: contrast(300%) brightness(0.7);
+            }
+            
+            * {
+              color: #000000 !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
           }
         </style>
       </head>
-      <body>${receipt}</body>
+      <body>
+        <div class="receipt-content">${receipt}</div>
+      </body>
       <script>
         window.onload = function() {
           setTimeout(function() {
@@ -330,27 +388,21 @@ const Sales = () => {
           {/* Products Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredProducts.map((product) => {
-              const productProfit = product.selling_price - product.cost_price
-              const profitMargin = ((productProfit / product.selling_price) * 100).toFixed(1)
-              
               return (
                 <div key={product.id} className="card">
                   <div className="card-body">
                     <div className="flex justify-between items-start mb-3">
                       <div>
                         <h3 className="font-semibold text-gray-900">{product.name}</h3>
-                        <p className="text-sm text-gray-500">Stock: {product.stock_quantity}</p>
-                        <p className="text-xs text-green-600">
-                          Profit: ${productProfit.toFixed(2)} ({profitMargin}%)
+                        <p className={`text-sm ${product.stock_quantity < 0 ? 'text-red-500' : 'text-gray-500'}`}>
+                          Stock: {product.stock_quantity}
+                          {product.stock_quantity < 0 && ' (Warning: Negative Stock)'}
                         </p>
                       </div>
                       <div className="text-right">
                         <span className="text-lg font-bold text-green-600">
                           ₹{product.selling_price}
                         </span>
-                        <p className="text-xs text-gray-500">
-                          Cost: ₹{product.cost_price}
-                        </p>
                       </div>
                     </div>
                     
@@ -368,14 +420,9 @@ const Sales = () => {
                     
                     <button
                       onClick={() => handleAddToCart(product)}
-                      disabled={product.stock_quantity === 0}
-                      className={`w-full btn ${
-                        product.stock_quantity === 0 
-                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                          : 'btn-primary'
-                      }`}
+                      className="w-full btn btn-primary"
                     >
-                      {product.stock_quantity === 0 ? 'Out of Stock' : 'Add to Cart'}
+                      Add to Cart
                     </button>
                   </div>
                 </div>
@@ -407,7 +454,7 @@ const Sales = () => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  School (Optional - Select for Commission)
+                  School (Optional)
                 </label>
                 <select
                   className="input"
@@ -424,11 +471,6 @@ const Sales = () => {
                     </option>
                   ))}
                 </select>
-                {selectedSchool && (
-                  <p className="text-xs text-green-600 mt-1">
-                    Commission will be calculated for {selectedSchool.name}
-                  </p>
-                )}
               </div>
             </div>
           </div>
@@ -446,43 +488,45 @@ const Sales = () => {
                 <p className="text-gray-500 text-center py-8">Your cart is empty</p>
               ) : (
                 <div className="space-y-4">
-                  {cart.map((item) => (
-                    <div key={item.product.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{item.product.name}</p>
-                        <p className="text-sm text-gray-500">
-                          ₹{item.product.selling_price} each
-                        </p>
+                  {cart.map((item) => {
+                    return (
+                      <div key={item.product.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900">{item.product.name}</p>
+                          <p className="text-sm text-gray-500">
+                            ₹{item.product.selling_price} each
+                          </p>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => handleUpdateQuantity(item.product.id, item.quantity - 1)}
+                            className="p-1 text-gray-500 hover:text-gray-700"
+                          >
+                            <Minus className="w-4 h-4" />
+                          </button>
+                          
+                          <span className="w-8 text-center font-medium">{item.quantity}</span>
+                          
+                          <button
+                            onClick={() => handleUpdateQuantity(item.product.id, item.quantity + 1)}
+                            className="p-1 text-gray-500 hover:text-gray-700"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                          
+                          <button
+                            onClick={() => dispatch(removeFromCart(item.product.id))}
+                            className="p-1 text-red-500 hover:text-red-700 ml-2"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                      
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => handleUpdateQuantity(item.product.id, item.quantity - 1)}
-                          className="p-1 text-gray-500 hover:text-gray-700"
-                        >
-                          <Minus className="w-4 h-4" />
-                        </button>
-                        
-                        <span className="w-8 text-center font-medium">{item.quantity}</span>
-                        
-                        <button
-                          onClick={() => handleUpdateQuantity(item.product.id, item.quantity + 1)}
-                          className="p-1 text-gray-500 hover:text-gray-700"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                        
-                        <button
-                          onClick={() => dispatch(removeFromCart(item.product.id))}
-                          className="p-1 text-red-500 hover:text-red-700 ml-2"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                   
-                  {/* Financial Summary - Remove cost display */}
+                  {/* Financial Summary */}
                   <div className="border-t border-gray-200 pt-4 space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-medium text-gray-600">Subtotal:</span>
@@ -531,13 +575,36 @@ const Sales = () => {
                       </span>
                     </div>
                     
-                    <button
-                      onClick={handleCreateSale}
-                      disabled={loading || !amountPaid || parseFloat(amountPaid) <= 0}
-                      className="w-full btn btn-success"
-                    >
-                      {loading ? 'Processing...' : 'Complete Sale'}
-                    </button>
+                    <div className="grid grid-cols-2 gap-4">
+                      <button
+                        onClick={() => handleCreateSale(true)}
+                        disabled={loading || !amountPaid || parseFloat(amountPaid) <= 0}
+                        className="w-full btn btn-primary flex items-center justify-center"
+                      >
+                        {loading ? (
+                          'Processing...'
+                        ) : (
+                          <>
+                            <Printer className="w-4 h-4 mr-2" />
+                            Print
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleCreateSale(false)}
+                        disabled={loading || !amountPaid || parseFloat(amountPaid) <= 0}
+                        className="w-full btn btn-secondary flex items-center justify-center"
+                      >
+                        {loading ? (
+                          'Processing...'
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4 mr-2" />
+                            Save
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
