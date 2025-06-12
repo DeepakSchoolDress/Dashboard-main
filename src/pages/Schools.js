@@ -64,7 +64,7 @@ const Schools = () => {
 
   const fetchSchoolEarnings = async () => {
     try {
-      // Calculate commission earnings from sales
+      // Calculate commission earnings from sales (excluding cancelled ones)
       const { data, error } = await supabase
         .from('sale_items')
         .select(`
@@ -73,7 +73,8 @@ const Schools = () => {
           is_commissioned,
           sales!inner (
             school_id,
-            schools (id, name)
+            schools (id, name),
+            bill_cancellations (id)
           ),
           products!inner (
             id,
@@ -86,11 +87,15 @@ const Schools = () => {
 
       const earnings = {}
       data?.forEach(item => {
+        // Skip if sale is cancelled
+        if (item.sales.bill_cancellations && item.sales.bill_cancellations.length > 0) {
+          return
+        }
+
         const schoolId = item.sales.school_id
         if (schoolId && item.products.commissions.length > 0) {
           const commissionRate = item.products.commissions[0].commission_rate
-          const saleAmount = item.quantity * item.unit_price
-          const commissionAmount = saleAmount * commissionRate
+          const commissionAmount = commissionRate * item.quantity // Commission per unit * quantity
           
           if (!earnings[schoolId]) {
             earnings[schoolId] = {
@@ -100,7 +105,8 @@ const Schools = () => {
             }
           }
           earnings[schoolId].total_commission += commissionAmount
-          earnings[schoolId].total_sales += saleAmount
+          // For total_sales, we calculate based on the commission amount since it's more relevant
+          earnings[schoolId].total_sales += (item.quantity * item.unit_price)
         }
       })
       

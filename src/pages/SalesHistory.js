@@ -91,13 +91,16 @@ const SalesHistory = () => {
 
       if (cancellationError) throw cancellationError
 
-      toast.success('Bill cancelled successfully and stock restored!')
+      toast.success('Bill cancelled successfully! Stock restored and earnings/commissions adjusted.')
       setShowCancelModal(false)
       setCancelReason('')
       setSelectedSale(null)
       
-      // Refresh sales data
+      // Refresh sales data to update the UI
       dispatch(fetchSales())
+      
+      // Note: Dashboard and Schools components will automatically reflect the changes
+      // when their data is next fetched, as they now exclude cancelled sales
       
     } catch (error) {
       console.error('Error cancelling bill:', error)

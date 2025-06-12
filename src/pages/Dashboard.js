@@ -44,7 +44,7 @@ const Dashboard = () => {
 
   const fetchFinancialStats = async () => {
     try {
-      // Get all sales with their items and related data
+      // Get all sales with their items and related data, including cancellation status
       const { data: salesData, error: salesError } = await supabase
         .from('sales')
         .select(`
@@ -65,6 +65,10 @@ const Dashboard = () => {
                 commission_rate
               )
             )
+          ),
+          bill_cancellations (
+            id,
+            cancelled_at
           )
         `)
         .order('created_at', { ascending: false })
@@ -83,8 +87,13 @@ const Dashboard = () => {
       const schoolCommissions = {}
       const activeSchools = new Set()
 
-      // Process each sale
+      // Process each sale (excluding cancelled ones)
       salesData.forEach(sale => {
+        // Skip cancelled sales
+        if (sale.bill_cancellations && sale.bill_cancellations.length > 0) {
+          return
+        }
+
         if (!sale.sale_items) return // Skip if no items
 
         const amountPaid = parseFloat(sale.amount_paid || sale.total_amount)
@@ -197,8 +206,8 @@ const Dashboard = () => {
       bgColor: 'bg-indigo-100'
     },
     {
-      title: 'Orders',
-      value: sales.length.toString(),
+      title: 'Active Orders',
+      value: sales.filter(sale => !sale.bill_cancellations || sale.bill_cancellations.length === 0).length.toString(),
       icon: ShoppingCart,
       color: 'text-orange-600',
       bgColor: 'bg-orange-100'
@@ -284,28 +293,31 @@ const Dashboard = () => {
             </h3>
           </div>
           <div className="card-body">
-            {sales.length === 0 ? (
+            {sales.filter(sale => !sale.bill_cancellations || sale.bill_cancellations.length === 0).length === 0 ? (
               <p className="text-gray-500 text-center py-4">No recent sales</p>
             ) : (
               <div className="space-y-3">
-                {sales.slice(0, 5).map((sale) => (
-                  <div key={sale.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="font-medium text-gray-900">{sale.customer_name}</p>
-                      <p className="text-sm text-gray-500">
-                        {sale.schools ? sale.schools.name : 'Direct Sale'}
-                      </p>
+                {sales
+                  .filter(sale => !sale.bill_cancellations || sale.bill_cancellations.length === 0)
+                  .slice(0, 5)
+                  .map((sale) => (
+                    <div key={sale.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="font-medium text-gray-900">{sale.customer_name}</p>
+                        <p className="text-sm text-gray-500">
+                          {sale.schools ? sale.schools.name : 'Direct Sale'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-gray-900">
+                          ₹{parseFloat(sale.amount_paid || sale.total_amount).toFixed(2)}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(sale.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-gray-900">
-                        ₹{parseFloat(sale.amount_paid || sale.total_amount).toFixed(2)}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {new Date(sale.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             )}
           </div>
