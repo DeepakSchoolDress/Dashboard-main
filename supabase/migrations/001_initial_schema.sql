@@ -27,7 +27,7 @@ CREATE TABLE commissions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
     product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-    commission_rate NUMERIC NOT NULL CHECK (commission_rate >= 0 AND commission_rate <= 1),
+    commission_rate NUMERIC NOT NULL CHECK (commission_rate >= 0),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     UNIQUE(school_id, product_id)
 );

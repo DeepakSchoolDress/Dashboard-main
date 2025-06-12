@@ -114,7 +114,7 @@ const Dashboard = () => {
               item.products.commissions && 
               item.products.commissions.length > 0) {
             const commissionRate = item.products.commissions[0].commission_rate
-            const commissionAmount = itemAmountPaid * commissionRate
+            const commissionAmount = commissionRate * item.quantity // Commission per unit * quantity
             
             totalCommissions += commissionAmount
             

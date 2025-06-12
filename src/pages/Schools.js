@@ -157,12 +157,12 @@ const Schools = () => {
 
   const handleAddCommission = async () => {
     if (!newCommission.product_id || !newCommission.commission_rate) {
-      toast.error('Please select a product and enter commission rate')
+      toast.error('Please select a product and enter commission amount')
       return
     }
 
-    if (parseFloat(newCommission.commission_rate) < 0 || parseFloat(newCommission.commission_rate) > 100) {
-      toast.error('Commission rate must be between 0 and 100')
+    if (parseFloat(newCommission.commission_rate) < 0) {
+      toast.error('Commission amount must be greater than or equal to 0')
       return
     }
 
@@ -172,7 +172,7 @@ const Schools = () => {
         .insert({
           school_id: selectedSchool.id,
           product_id: newCommission.product_id,
-          commission_rate: parseFloat(newCommission.commission_rate) / 100 // Convert percentage to decimal
+          commission_rate: parseFloat(newCommission.commission_rate) // No need to divide by 100 anymore
         })
 
       if (error) {
@@ -397,17 +397,19 @@ const Schools = () => {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Commission Rate (%)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        max="100"
-                        className="input"
-                        placeholder="e.g., 5.5"
-                        value={newCommission.commission_rate}
-                        onChange={(e) => setNewCommission({ ...newCommission, commission_rate: e.target.value })}
-                      />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Commission Amount (₹)</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">₹</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="input pl-8"
+                          placeholder="e.g., 50"
+                          value={newCommission.commission_rate}
+                          onChange={(e) => setNewCommission({ ...newCommission, commission_rate: e.target.value })}
+                        />
+                      </div>
                     </div>
                     <div className="flex items-end">
                       <button
@@ -433,28 +435,20 @@ const Schools = () => {
                           <tr>
                             <th>Product</th>
                             <th>Product Price</th>
-                            <th>Commission Rate</th>
-                            <th>Commission per Sale</th>
+                            <th>Commission Amount</th>
                             <th>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
                           {schoolCommissions.map(commission => {
-                            const commissionAmount = commission.products.selling_price * commission.commission_rate
                             return (
                               <tr key={commission.id}>
                                 <td className="font-medium">{commission.products.name}</td>
                                 <td>₹{commission.products.selling_price}</td>
-                                <td>
-                                  <span className="flex items-center">
-                                    <Percent className="w-4 h-4 mr-1" />
-                                    {(commission.commission_rate * 100).toFixed(2)}%
-                                  </span>
-                                </td>
                                 <td className="font-semibold text-green-600">
                                   <span className="flex items-center">
                                     <IndianRupee className="w-4 h-4 mr-1" />
-                                    ₹{commissionAmount.toFixed(2)}
+                                    ₹{commission.commission_rate.toFixed(2)}
                                   </span>
                                 </td>
                                 <td>

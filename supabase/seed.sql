@@ -44,25 +44,25 @@ BEGIN
     SELECT id INTO bag_id FROM products WHERE name = 'School Bag';
     SELECT id INTO art_kit_id FROM products WHERE name = 'Art Supplies Kit';
     
-    -- Set up commissions (5% for Springfield, 7% for Riverside, 10% for Oakwood)
+    -- Set up commissions (fixed amounts in rupees)
     INSERT INTO commissions (school_id, product_id, commission_rate) VALUES
-        -- Springfield Elementary (5% commission)
-        (springfield_id, notebook_id, 0.05),
-        (springfield_id, pen_blue_id, 0.05),
-        (springfield_id, pen_black_id, 0.05),
-        (springfield_id, geometry_id, 0.05),
-        (springfield_id, art_kit_id, 0.05),
+        -- Springfield Elementary (lower commission)
+        (springfield_id, notebook_id, 5),
+        (springfield_id, pen_blue_id, 2),
+        (springfield_id, pen_black_id, 2),
+        (springfield_id, geometry_id, 10),
+        (springfield_id, art_kit_id, 25),
         
-        -- Riverside High School (7% commission)
-        (riverside_id, notebook_id, 0.07),
-        (riverside_id, calculator_id, 0.07),
-        (riverside_id, geometry_id, 0.07),
-        (riverside_id, bag_id, 0.07),
+        -- Riverside High School (medium commission)
+        (riverside_id, notebook_id, 7),
+        (riverside_id, calculator_id, 50),
+        (riverside_id, geometry_id, 15),
+        (riverside_id, bag_id, 40),
         
-        -- Oakwood Academy (10% commission)
-        (oakwood_id, notebook_id, 0.10),
-        (oakwood_id, pen_blue_id, 0.10),
-        (oakwood_id, calculator_id, 0.10),
-        (oakwood_id, bag_id, 0.10),
-        (oakwood_id, art_kit_id, 0.10);
+        -- Oakwood Academy (higher commission)
+        (oakwood_id, notebook_id, 10),
+        (oakwood_id, pen_blue_id, 3),
+        (oakwood_id, calculator_id, 75),
+        (oakwood_id, bag_id, 50),
+        (oakwood_id, art_kit_id, 40);
 END $$; 
