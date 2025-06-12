@@ -15,10 +15,33 @@ const SalesHistory = () => {
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
   const [cancelling, setCancelling] = useState(false)
+  const [commissionMap, setCommissionMap] = useState({})
 
   useEffect(() => {
     dispatch(fetchSales())
+    fetchCommissionData()
   }, [dispatch])
+
+  const fetchCommissionData = async () => {
+    try {
+      // Get all commission rates
+      const { data: commissionsData, error: commissionsError } = await supabase
+        .from('commissions')
+        .select('school_id, product_id, commission_amount')
+
+      if (commissionsError) throw commissionsError
+
+      // Create commission lookup map
+      const commissions = {}
+      commissionsData.forEach(commission => {
+        const key = `${commission.school_id}_${commission.product_id}`
+        commissions[key] = commission.commission_amount
+      })
+      setCommissionMap(commissions)
+    } catch (error) {
+      console.error('Error fetching commission data:', error)
+    }
+  }
 
   const filteredSales = sales.filter(sale =>
     sale.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -165,7 +188,7 @@ const SalesHistory = () => {
                     <th>Total</th>
                     <th>Paid</th>
                     <th>Discount</th>
-                    <th>Rent</th>
+                    <th>Profit</th>
                     <th>Date</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -183,7 +206,15 @@ const SalesHistory = () => {
                       profit = sale.sale_items.reduce((total, item) => {
                         const itemRevenue = item.quantity * amountPaid * (item.unit_price / totalAmount)
                         const itemCost = item.quantity * (item.products?.cost_price || 0)
-                        return total + (itemRevenue - itemCost)
+                        
+                        // Calculate commission if applicable
+                        let itemCommission = 0
+                        if (item.is_commissioned && sale.school_id) {
+                          const commissionKey = `${sale.school_id}_${item.product_id}`
+                          itemCommission = (commissionMap[commissionKey] || 0) * item.quantity
+                        }
+                        
+                        return total + (itemRevenue - itemCost - itemCommission)
                       }, 0)
                     }
                     
@@ -291,7 +322,7 @@ const SalesHistory = () => {
                   {selectedSale.sale_items && selectedSale.sale_items.length > 0 && (
                     <div className="bg-blue-50 p-3 rounded-lg">
                       <p className="text-sm font-medium text-blue-800 mb-2">Profit Analysis</p>
-                      <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div className="grid grid-cols-4 gap-4 text-sm">
                         <div>
                           <p className="text-blue-600">Total Cost:</p>
                           <p className="font-semibold">
@@ -301,23 +332,54 @@ const SalesHistory = () => {
                           </p>
                         </div>
                         <div>
+                          <p className="text-blue-600">Commission:</p>
+                          <p className="font-semibold">
+                            ₹{selectedSale.sale_items.reduce((total, item) => {
+                              if (item.is_commissioned && selectedSale.school_id) {
+                                const commissionKey = `${selectedSale.school_id}_${item.product_id}`
+                                const commissionAmount = (commissionMap[commissionKey] || 0) * item.quantity
+                                return total + commissionAmount
+                              }
+                              return total
+                            }, 0).toFixed(2)}
+                          </p>
+                        </div>
+                        <div>
                           <p className="text-blue-600">Revenue:</p>
                           <p className="font-semibold">
                             ₹{parseFloat(selectedSale.amount_paid || selectedSale.total_amount).toFixed(2)}
                           </p>
                         </div>
                         <div>
-                          <p className="text-blue-600">Rent:</p>
+                          <p className="text-blue-600">Net Profit:</p>
                           <p className={`font-semibold ${
                             (parseFloat(selectedSale.amount_paid || selectedSale.total_amount) - 
                              selectedSale.sale_items.reduce((total, item) => 
                                total + (item.quantity * (item.products?.cost_price || 0)), 0
-                             )) >= 0 ? 'text-green-600' : 'text-red-600'
+                             ) -
+                             selectedSale.sale_items.reduce((total, item) => {
+                               if (item.is_commissioned && selectedSale.school_id) {
+                                 const commissionKey = `${selectedSale.school_id}_${item.product_id}`
+                                 const commissionAmount = (commissionMap[commissionKey] || 0) * item.quantity
+                                 return total + commissionAmount
+                               }
+                               return total
+                             }, 0)
+                            ) >= 0 ? 'text-green-600' : 'text-red-600'
                           }`}>
                             ₹{(parseFloat(selectedSale.amount_paid || selectedSale.total_amount) - 
                               selectedSale.sale_items.reduce((total, item) => 
                                 total + (item.quantity * (item.products?.cost_price || 0)), 0
-                              )).toFixed(2)}
+                              ) -
+                              selectedSale.sale_items.reduce((total, item) => {
+                                if (item.is_commissioned && selectedSale.school_id) {
+                                  const commissionKey = `${selectedSale.school_id}_${item.product_id}`
+                                  const commissionAmount = (commissionMap[commissionKey] || 0) * item.quantity
+                                  return total + commissionAmount
+                                }
+                                return total
+                              }, 0)
+                            ).toFixed(2)}
                           </p>
                         </div>
                       </div>

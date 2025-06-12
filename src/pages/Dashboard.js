@@ -114,21 +114,21 @@ const Dashboard = () => {
 
           const itemRevenue = item.quantity * amountPaid * (item.unit_price / totalAmount)
           const itemCost = item.quantity * item.products.cost_price
-          totalProfit += itemRevenue - itemCost
-
+          
           // Calculate commission if applicable
+          let itemCommission = 0
           if (item.is_commissioned && sale.school_id) {
             const commissionKey = `${sale.school_id}_${item.product_id}`
             const commissionRate = commissionMap[commissionKey] || 0
-            const commissionAmount = commissionRate * item.quantity
+            itemCommission = commissionRate * item.quantity
             
-            totalCommissions += commissionAmount
+            totalCommissions += itemCommission
             
             // Check if commission is from current month
             const saleDate = new Date(sale.created_at)
             if (saleDate.getMonth() === currentMonth && 
                 saleDate.getFullYear() === currentYear) {
-              commissionsThisMonth += commissionAmount
+              commissionsThisMonth += itemCommission
             }
 
             // Track school commissions
@@ -140,9 +140,12 @@ const Dashboard = () => {
                   total_commission: 0
                 }
               }
-              schoolCommissions[sale.school_id].total_commission += commissionAmount
+              schoolCommissions[sale.school_id].total_commission += itemCommission
             }
           }
+          
+          // Calculate profit (Revenue - Cost - Commission)
+          totalProfit += itemRevenue - itemCost - itemCommission
         })
       })
 
@@ -182,11 +185,11 @@ const Dashboard = () => {
       bgColor: 'bg-green-100'
     },
     {
-      title: 'Rent',
+      title: 'Profit',
       value: `₹${financialStats.totalProfit.toFixed(2)}`,
       icon: TrendingUp,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-100'
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-100'
     },
     {
       title: 'Total Commissions',
@@ -338,10 +341,10 @@ const Dashboard = () => {
               <p className="text-sm text-gray-500">Total Revenue</p>
             </div>
             <div className="text-center">
-              <p className="text-3xl font-bold text-blue-600">
+              <p className="text-3xl font-bold text-purple-600">
                 ₹{financialStats.totalProfit.toFixed(2)}
               </p>
-              <p className="text-sm text-gray-500">Rent</p>
+              <p className="text-sm text-gray-500">Profit</p>
             </div>
             <div className="text-center">
               <p className="text-3xl font-bold text-purple-600">
