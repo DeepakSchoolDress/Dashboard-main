@@ -182,7 +182,7 @@ const Dashboard = () => {
       bgColor: 'bg-green-100'
     },
     {
-      title: 'Total Profit',
+      title: 'Rent',
       value: `₹${financialStats.totalProfit.toFixed(2)}`,
       icon: TrendingUp,
       color: 'text-blue-600',
@@ -341,7 +341,7 @@ const Dashboard = () => {
               <p className="text-3xl font-bold text-blue-600">
                 ₹{financialStats.totalProfit.toFixed(2)}
               </p>
-              <p className="text-sm text-gray-500">Total Profit</p>
+              <p className="text-sm text-gray-500">Rent</p>
             </div>
             <div className="text-center">
               <p className="text-3xl font-bold text-purple-600">

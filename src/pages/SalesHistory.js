@@ -165,7 +165,7 @@ const SalesHistory = () => {
                     <th>Total</th>
                     <th>Paid</th>
                     <th>Discount</th>
-                    <th>Profit</th>
+                    <th>Rent</th>
                     <th>Date</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -307,7 +307,7 @@ const SalesHistory = () => {
                           </p>
                         </div>
                         <div>
-                          <p className="text-blue-600">Profit:</p>
+                          <p className="text-blue-600">Rent:</p>
                           <p className={`font-semibold ${
                             (parseFloat(selectedSale.amount_paid || selectedSale.total_amount) - 
                              selectedSale.sale_items.reduce((total, item) => 

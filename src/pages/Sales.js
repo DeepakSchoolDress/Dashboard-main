@@ -302,7 +302,7 @@ const Sales = () => {
         <style>
           body {
             font-family: 'Courier New', monospace;
-            font-size: 14px;
+            font-size: 14.5px;
             font-weight: bold;
             line-height: 1.3;
             margin: 10px;
@@ -314,21 +314,21 @@ const Sales = () => {
           }
           
           .receipt-content {
-            filter: contrast(200%) brightness(0.8);
+            filter: contrast(250%) brightness(0.7);
             font-weight: 900;
           }
           
           @media print {
             body { 
               margin: 0; 
-              font-size: 12px;
+              font-size: 12.5px;
               font-weight: 900;
               color: #000000 !important;
             }
             
             .receipt-content {
-              filter: contrast(300%) brightness(0.7);
-              -webkit-filter: contrast(300%) brightness(0.7);
+              filter: contrast(400%) brightness(0.6);
+              -webkit-filter: contrast(400%) brightness(0.6);
             }
             
             * {
