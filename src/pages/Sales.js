@@ -454,10 +454,11 @@ const Sales = () => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  School (Optional)
+                  School
                 </label>
                 <select
                   className="input"
+                  required
                   value={selectedSchool?.id || ''}
                   onChange={(e) => {
                     const school = schools.find(s => s.id === e.target.value)

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { Search, X, Eye } from 'lucide-react'
+import { Search, X, Eye, Edit2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { fetchSales } from '../store/slices/salesSlice'
 import { supabase } from '../lib/supabase'
@@ -13,9 +13,15 @@ const SalesHistory = () => {
   const [selectedSale, setSelectedSale] = useState(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
   const [cancelling, setCancelling] = useState(false)
   const [commissionMap, setCommissionMap] = useState({})
+  const [editFormData, setEditFormData] = useState({
+    customer_name: '',
+    amount_paid: '',
+  })
+  const [updating, setUpdating] = useState(false)
 
   useEffect(() => {
     dispatch(fetchSales())
@@ -143,6 +149,54 @@ const SalesHistory = () => {
     setShowCancelModal(true)
   }
 
+  const openEditModal = (sale) => {
+    setSelectedSale(sale)
+    setEditFormData({
+      customer_name: sale.customer_name,
+      amount_paid: sale.amount_paid.toString(),
+    })
+    setShowEditModal(true)
+  }
+
+  const handleUpdate = async () => {
+    if (!selectedSale) return
+
+    // Validate amount paid
+    const newAmountPaid = parseFloat(editFormData.amount_paid)
+    if (isNaN(newAmountPaid) || newAmountPaid <= 0) {
+      toast.error('Please enter a valid amount')
+      return
+    }
+
+    if (newAmountPaid > selectedSale.total_amount) {
+      toast.error('Amount paid cannot be greater than total amount')
+      return
+    }
+
+    setUpdating(true)
+    try {
+      const { error } = await supabase
+        .from('sales')
+        .update({
+          customer_name: editFormData.customer_name.trim(),
+          amount_paid: newAmountPaid
+        })
+        .eq('id', selectedSale.id)
+
+      if (error) throw error
+
+      toast.success('Sale updated successfully')
+      setShowEditModal(false)
+      setSelectedSale(null)
+      dispatch(fetchSales())
+    } catch (error) {
+      console.error('Error updating sale:', error)
+      toast.error('Failed to update sale')
+    } finally {
+      setUpdating(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -188,7 +242,7 @@ const SalesHistory = () => {
                     <th>Total</th>
                     <th>Paid</th>
                     <th>Discount</th>
-                    <th>Profit</th>
+                    <th>Expenditure</th>
                     <th>Date</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -250,13 +304,22 @@ const SalesHistory = () => {
                               <Eye className="w-4 h-4" />
                             </button>
                             {!sale.bill_cancellations?.length && (
-                              <button
-                                onClick={() => openCancelModal(sale)}
-                                className="p-1 text-red-600 hover:text-red-800"
-                                title="Cancel Bill"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => openEditModal(sale)}
+                                  className="p-1 text-green-600 hover:text-green-800"
+                                  title="Edit Sale"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => openCancelModal(sale)}
+                                  className="p-1 text-red-600 hover:text-red-800"
+                                  title="Cancel Bill"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </>
                             )}
                           </div>
                         </td>
@@ -321,7 +384,7 @@ const SalesHistory = () => {
                   {/* Profit Summary */}
                   {selectedSale.sale_items && selectedSale.sale_items.length > 0 && (
                     <div className="bg-blue-50 p-3 rounded-lg">
-                      <p className="text-sm font-medium text-blue-800 mb-2">Profit Analysis</p>
+                      <p className="text-sm font-medium text-blue-800 mb-2">Expenditure Analysis</p>
                       <div className="grid grid-cols-4 gap-4 text-sm">
                         <div>
                           <p className="text-blue-600">Total Cost:</p>
@@ -351,7 +414,7 @@ const SalesHistory = () => {
                           </p>
                         </div>
                         <div>
-                          <p className="text-blue-600">Net Profit:</p>
+                          <p className="text-blue-600">Net Expenditure:</p>
                           <p className={`font-semibold ${
                             (parseFloat(selectedSale.amount_paid || selectedSale.total_amount) - 
                              selectedSale.sale_items.reduce((total, item) => 
@@ -493,6 +556,78 @@ const SalesHistory = () => {
                 >
                   Keep Bill
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && selectedSale && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowEditModal(false)}></div>
+            
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Edit Sale</h3>
+                  <button
+                    onClick={() => setShowEditModal(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Customer Name
+                    </label>
+                    <input
+                      type="text"
+                      className="input"
+                      value={editFormData.customer_name}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, customer_name: e.target.value }))}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Amount Paid (₹)
+                    </label>
+                    <input
+                      type="number"
+                      className="input"
+                      min="0"
+                      max={selectedSale.total_amount}
+                      step="0.01"
+                      value={editFormData.amount_paid}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, amount_paid: e.target.value }))}
+                    />
+                    <p className="text-sm text-gray-500 mt-1">
+                      Total Amount: ₹{selectedSale.total_amount}
+                    </p>
+                  </div>
+
+                  <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                    <button
+                      onClick={handleUpdate}
+                      disabled={updating}
+                      className="w-full inline-flex justify-center btn btn-primary sm:ml-3 sm:w-auto sm:text-sm"
+                    >
+                      {updating ? 'Updating...' : 'Update Sale'}
+                    </button>
+                    <button
+                      onClick={() => setShowEditModal(false)}
+                      disabled={updating}
+                      className="mt-3 w-full inline-flex justify-center btn btn-secondary sm:mt-0 sm:w-auto sm:text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

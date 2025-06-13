@@ -185,7 +185,7 @@ const Dashboard = () => {
       bgColor: 'bg-green-100'
     },
     {
-      title: 'Profit',
+      title: 'Expenditure',
       value: `₹${financialStats.totalProfit.toFixed(2)}`,
       icon: TrendingUp,
       color: 'text-purple-600',
