@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { ShoppingCart, Package, School, DollarSign, TrendingUp, Percent } from 'lucide-react'
+import { ShoppingCart, Package, School, DollarSign, TrendingUp, Percent, Calendar } from 'lucide-react'
 import { fetchProducts } from '../store/slices/productsSlice'
 import { fetchSchools } from '../store/slices/schoolsSlice'
 import { fetchSales } from '../store/slices/salesSlice'
@@ -22,6 +22,11 @@ const Dashboard = () => {
     topSchools: []
   })
   const [loading, setLoading] = useState(true)
+  const [dateRange, setDateRange] = useState({
+    start: new Date().toISOString().split('T')[0], // Today
+    end: new Date().toISOString().split('T')[0]     // Today
+  })
+  const [filteredSales, setFilteredSales] = useState([])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -31,7 +36,6 @@ const Dashboard = () => {
           dispatch(fetchSchools()),
           dispatch(fetchSales())
         ])
-        await fetchFinancialStats()
       } catch (error) {
         console.error('Error fetching dashboard data:', error)
       } finally {
@@ -42,51 +46,20 @@ const Dashboard = () => {
     fetchData()
   }, [dispatch])
 
-  const fetchFinancialStats = async () => {
-    try {
-      // Get all sales with their items and related data, including cancellation status
-      const { data: salesData, error: salesError } = await supabase
-        .from('sales')
-        .select(`
-          id,
-          total_amount,
-          amount_paid,
-          created_at,
-          school_id,
-          schools (id, name),
-          sale_items (
-            quantity,
-            unit_price,
-            is_commissioned,
-            product_id,
-            products (
-              id,
-              cost_price
-            )
-          ),
-          bill_cancellations (
-            id,
-            cancelled_at
-          )
-        `)
-        .order('created_at', { ascending: false })
-
-      if (salesError) throw salesError
-
-      // Get all commission rates
-      const { data: commissionsData, error: commissionsError } = await supabase
-        .from('commissions')
-        .select('school_id, product_id, commission_amount')
-
-      if (commissionsError) throw commissionsError
-
-      // Create commission lookup map
-      const commissionMap = {}
-      commissionsData.forEach(commission => {
-        const key = `${commission.school_id}_${commission.product_id}`
-        commissionMap[key] = commission.commission_amount
+  // Filter sales based on date range
+  useEffect(() => {
+    if (sales.length > 0) {
+      const filtered = sales.filter(sale => {
+        const saleDate = new Date(sale.created_at).toISOString().split('T')[0]
+        return saleDate >= dateRange.start && saleDate <= dateRange.end
       })
+      setFilteredSales(filtered)
+      calculateFinancialStats(filtered)
+    }
+  }, [sales, dateRange])
 
+  const calculateFinancialStats = async (salesData) => {
+    try {
       const currentDate = new Date()
       const currentMonth = currentDate.getMonth()
       const currentYear = currentDate.getFullYear()
@@ -109,18 +82,16 @@ const Dashboard = () => {
         totalRevenue += amountPaid
         totalDiscounts += totalAmount - amountPaid
 
-        sale.sale_items.forEach(item => {
+        sale.sale_items?.forEach(item => {
           if (!item.products) return // Skip if no product data
 
           const itemRevenue = item.quantity * amountPaid * (item.unit_price / totalAmount)
           const itemCost = item.quantity * item.products.cost_price
           
-          // Calculate commission if applicable
+          // Calculate commission if applicable - use commission_amount from sale_items
           let itemCommission = 0
-          if (item.is_commissioned && sale.school_id) {
-            const commissionKey = `${sale.school_id}_${item.product_id}`
-            const commissionRate = commissionMap[commissionKey] || 0
-            itemCommission = commissionRate * item.quantity
+          if (item.is_commissioned && sale.school_id && item.commission_amount) {
+            itemCommission = item.commission_amount * item.quantity
             
             totalCommissions += itemCommission
             
@@ -164,8 +135,38 @@ const Dashboard = () => {
         topSchools
       })
     } catch (error) {
-      console.error('Error fetching financial stats:', error)
+      console.error('Error calculating financial stats:', error)
     }
+  }
+
+  const handleDateRangeChange = (field, value) => {
+    setDateRange(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  const setTodayRange = () => {
+    const today = new Date().toISOString().split('T')[0]
+    setDateRange({ start: today, end: today })
+  }
+
+  const setWeekRange = () => {
+    const today = new Date()
+    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+    setDateRange({
+      start: weekAgo.toISOString().split('T')[0],
+      end: today.toISOString().split('T')[0]
+    })
+  }
+
+  const setMonthRange = () => {
+    const today = new Date()
+    const monthAgo = new Date(today.getFullYear(), today.getMonth(), 1)
+    setDateRange({
+      start: monthAgo.toISOString().split('T')[0],
+      end: today.toISOString().split('T')[0]
+    })
   }
 
   if (loading) {
@@ -207,7 +208,7 @@ const Dashboard = () => {
     },
     {
       title: 'Active Orders',
-      value: sales.filter(sale => !sale.bill_cancellations || sale.bill_cancellations.length === 0).length.toString(),
+      value: filteredSales.filter(sale => !sale.bill_cancellations || sale.bill_cancellations.length === 0).length.toString(),
       icon: ShoppingCart,
       color: 'text-orange-600',
       bgColor: 'bg-orange-100'
@@ -226,6 +227,38 @@ const Dashboard = () => {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-gray-600">Overview of your inventory and sales</p>
+      </div>
+
+      {/* Date Range Filter */}
+      <div className="card">
+        <div className="card-body">
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-gray-500" />
+              <span className="font-medium text-gray-700">Date Range:</span>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => handleDateRangeChange('start', e.target.value)}
+                className="input"
+              />
+              <span className="text-gray-500 self-center">to</span>
+              <input
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => handleDateRangeChange('end', e.target.value)}
+                className="input"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={setTodayRange} className="btn btn-sm btn-secondary">Today</button>
+              <button onClick={setWeekRange} className="btn btn-sm btn-secondary">Week</button>
+              <button onClick={setMonthRange} className="btn btn-sm btn-secondary">Month</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -293,11 +326,11 @@ const Dashboard = () => {
             </h3>
           </div>
           <div className="card-body">
-            {sales.filter(sale => !sale.bill_cancellations || sale.bill_cancellations.length === 0).length === 0 ? (
+            {filteredSales.filter(sale => !sale.bill_cancellations || sale.bill_cancellations.length === 0).length === 0 ? (
               <p className="text-gray-500 text-center py-4">No recent sales</p>
             ) : (
               <div className="space-y-3">
-                {sales
+                {filteredSales
                   .filter(sale => !sale.bill_cancellations || sale.bill_cancellations.length === 0)
                   .slice(0, 5)
                   .map((sale) => (

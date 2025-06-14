@@ -15,6 +15,7 @@ export const fetchSales = createAsyncThunk(
             quantity,
             unit_price,
             is_commissioned,
+            commission_amount,
             products (id, name, cost_price, selling_price)
           ),
           bill_cancellations (

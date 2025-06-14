@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { Search, X, Eye, Edit2 } from 'lucide-react'
+import { Search, X, Eye, Edit2, Calendar } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { fetchSales } from '../store/slices/salesSlice'
 import { supabase } from '../lib/supabase'
@@ -22,6 +22,10 @@ const SalesHistory = () => {
     amount_paid: '',
   })
   const [updating, setUpdating] = useState(false)
+  const [dateRange, setDateRange] = useState({
+    start: new Date().toISOString().split('T')[0], // Today
+    end: new Date().toISOString().split('T')[0]     // Today
+  })
 
   useEffect(() => {
     dispatch(fetchSales())
@@ -49,10 +53,44 @@ const SalesHistory = () => {
     }
   }
 
-  const filteredSales = sales.filter(sale =>
-    sale.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (sale.schools && sale.schools.name.toLowerCase().includes(searchTerm.toLowerCase()))
-  )
+  const filteredSales = sales.filter(sale => {
+    const saleDate = new Date(sale.created_at).toISOString().split('T')[0]
+    const matchesDateRange = saleDate >= dateRange.start && saleDate <= dateRange.end
+    const matchesSearch = sale.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (sale.schools && sale.schools.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    
+    return matchesDateRange && matchesSearch
+  })
+
+  const handleDateRangeChange = (field, value) => {
+    setDateRange(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  const setTodayRange = () => {
+    const today = new Date().toISOString().split('T')[0]
+    setDateRange({ start: today, end: today })
+  }
+
+  const setWeekRange = () => {
+    const today = new Date()
+    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+    setDateRange({
+      start: weekAgo.toISOString().split('T')[0],
+      end: today.toISOString().split('T')[0]
+    })
+  }
+
+  const setMonthRange = () => {
+    const today = new Date()
+    const monthAgo = new Date(today.getFullYear(), today.getMonth(), 1)
+    setDateRange({
+      start: monthAgo.toISOString().split('T')[0],
+      end: today.toISOString().split('T')[0]
+    })
+  }
 
   const handleCancelBill = async () => {
     if (!selectedSale || !cancelReason.trim()) {
@@ -205,6 +243,38 @@ const SalesHistory = () => {
         <p className="text-gray-600">View and manage all sales transactions</p>
       </div>
 
+      {/* Date Range Filter */}
+      <div className="card">
+        <div className="card-body">
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-gray-500" />
+              <span className="font-medium text-gray-700">Date Range:</span>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => handleDateRangeChange('start', e.target.value)}
+                className="input"
+              />
+              <span className="text-gray-500 self-center">to</span>
+              <input
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => handleDateRangeChange('end', e.target.value)}
+                className="input"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={setTodayRange} className="btn btn-sm btn-secondary">Today</button>
+              <button onClick={setWeekRange} className="btn btn-sm btn-secondary">Week</button>
+              <button onClick={setMonthRange} className="btn btn-sm btn-secondary">Month</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Search */}
       <div className="card">
         <div className="card-body">
@@ -217,6 +287,46 @@ const SalesHistory = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+          </div>
+        </div>
+      </div>
+
+      {/* Summary */}
+      <div className="card">
+        <div className="card-body">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-blue-600">
+                {filteredSales.filter(sale => !sale.bill_cancellations?.length).length}
+              </p>
+              <p className="text-sm text-gray-500">Active Sales</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-green-600">
+                ₹{filteredSales
+                  .filter(sale => !sale.bill_cancellations?.length)
+                  .reduce((total, sale) => 
+                    total + parseFloat(sale.amount_paid || sale.total_amount), 0
+                  ).toFixed(2)}
+              </p>
+              <p className="text-sm text-gray-500">Total Revenue</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-orange-600">
+                ₹{filteredSales
+                  .filter(sale => !sale.bill_cancellations?.length)
+                  .reduce((total, sale) => 
+                    total + (parseFloat(sale.total_amount) - parseFloat(sale.amount_paid || sale.total_amount)), 0
+                  ).toFixed(2)}
+              </p>
+              <p className="text-sm text-gray-500">Total Discounts</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-red-600">
+                {filteredSales.filter(sale => sale.bill_cancellations?.length).length}
+              </p>
+              <p className="text-sm text-gray-500">Cancelled Sales</p>
+            </div>
           </div>
         </div>
       </div>
@@ -237,6 +347,7 @@ const SalesHistory = () => {
               <table className="table">
                 <thead>
                   <tr>
+                    <th>Bill No.</th>
                     <th>Customer</th>
                     <th>School</th>
                     <th>Total</th>
@@ -261,11 +372,10 @@ const SalesHistory = () => {
                         const itemRevenue = item.quantity * amountPaid * (item.unit_price / totalAmount)
                         const itemCost = item.quantity * (item.products?.cost_price || 0)
                         
-                        // Calculate commission if applicable
+                        // Calculate commission if applicable - use commission_amount from sale_items
                         let itemCommission = 0
-                        if (item.is_commissioned && sale.school_id) {
-                          const commissionKey = `${sale.school_id}_${item.product_id}`
-                          itemCommission = (commissionMap[commissionKey] || 0) * item.quantity
+                        if (item.is_commissioned && item.commission_amount) {
+                          itemCommission = item.commission_amount * item.quantity
                         }
                         
                         return total + (itemRevenue - itemCost - itemCommission)
@@ -274,6 +384,7 @@ const SalesHistory = () => {
                     
                     return (
                       <tr key={sale.id}>
+                        <td className="font-medium text-blue-600">{sale.bill_number || 'N/A'}</td>
                         <td className="font-medium">{sale.customer_name}</td>
                         <td>{sale.schools ? sale.schools.name : 'Direct Sale'}</td>
                         <td className="font-semibold">₹{totalAmount.toFixed(2)}</td>
@@ -354,6 +465,14 @@ const SalesHistory = () => {
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
+                      <p className="text-sm font-medium text-gray-500">Bill Number</p>
+                      <p className="text-blue-600 font-semibold">{selectedSale.bill_number || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-500">Date</p>
+                      <p className="text-gray-900">{new Date(selectedSale.created_at).toLocaleString()}</p>
+                    </div>
+                    <div>
                       <p className="text-sm font-medium text-gray-500">Customer</p>
                       <p className="text-gray-900">{selectedSale.customer_name}</p>
                     </div>
@@ -375,10 +494,6 @@ const SalesHistory = () => {
                         ₹{(parseFloat(selectedSale.total_amount) - parseFloat(selectedSale.amount_paid || selectedSale.total_amount)).toFixed(2)}
                       </p>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">Date</p>
-                      <p className="text-gray-900">{new Date(selectedSale.created_at).toLocaleString()}</p>
-                    </div>
                   </div>
 
                   {/* Profit Summary */}
@@ -398,10 +513,8 @@ const SalesHistory = () => {
                           <p className="text-blue-600">Commission:</p>
                           <p className="font-semibold">
                             ₹{selectedSale.sale_items.reduce((total, item) => {
-                              if (item.is_commissioned && selectedSale.school_id) {
-                                const commissionKey = `${selectedSale.school_id}_${item.product_id}`
-                                const commissionAmount = (commissionMap[commissionKey] || 0) * item.quantity
-                                return total + commissionAmount
+                              if (item.is_commissioned && item.commission_amount) {
+                                return total + (item.commission_amount * item.quantity)
                               }
                               return total
                             }, 0).toFixed(2)}
@@ -421,10 +534,8 @@ const SalesHistory = () => {
                                total + (item.quantity * (item.products?.cost_price || 0)), 0
                              ) -
                              selectedSale.sale_items.reduce((total, item) => {
-                               if (item.is_commissioned && selectedSale.school_id) {
-                                 const commissionKey = `${selectedSale.school_id}_${item.product_id}`
-                                 const commissionAmount = (commissionMap[commissionKey] || 0) * item.quantity
-                                 return total + commissionAmount
+                               if (item.is_commissioned && item.commission_amount) {
+                                 return total + (item.commission_amount * item.quantity)
                                }
                                return total
                              }, 0)
@@ -435,10 +546,8 @@ const SalesHistory = () => {
                                 total + (item.quantity * (item.products?.cost_price || 0)), 0
                               ) -
                               selectedSale.sale_items.reduce((total, item) => {
-                                if (item.is_commissioned && selectedSale.school_id) {
-                                  const commissionKey = `${selectedSale.school_id}_${item.product_id}`
-                                  const commissionAmount = (commissionMap[commissionKey] || 0) * item.quantity
-                                  return total + commissionAmount
+                                if (item.is_commissioned && item.commission_amount) {
+                                  return total + (item.commission_amount * item.quantity)
                                 }
                                 return total
                               }, 0)

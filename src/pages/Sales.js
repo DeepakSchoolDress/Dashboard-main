@@ -255,6 +255,7 @@ const Sales = () => {
     receipt += '        DEEPAK SCHOOL DRESS\n'
     receipt += '       CHOWK BAZAAR KAIRANA\n'
     receipt += '================================\n'
+    receipt += `Bill No: ${sale.bill_number || 'N/A'}\n`
     receipt += `Date: ${formattedDate} ${formattedTime}\n`
     receipt += `Customer: ${sale.customer_name}\n`
     
@@ -385,49 +386,50 @@ const Sales = () => {
             </div>
           </div>
 
-          {/* Products Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredProducts.map((product) => {
-              return (
-                <div key={product.id} className="card">
-                  <div className="card-body">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{product.name}</h3>
+          {/* Products List - Replacing Grid */}
+          <div className="card">
+            <div className="card-body p-0">
+              <div className="divide-y divide-gray-200">
+                {filteredProducts.map((product) => (
+                  <div key={product.id} className="flex items-center justify-between p-4 hover:bg-gray-50">
+                    <div className="flex-1 min-w-0 mr-4">
+                      <h3 className="font-medium text-gray-900">{product.name}</h3>
+                      <div className="flex items-center mt-1">
                         <p className={`text-sm ${product.stock_quantity < 0 ? 'text-red-500' : 'text-gray-500'}`}>
                           Stock: {product.stock_quantity}
                           {product.stock_quantity < 0 && ' (Warning: Negative Stock)'}
                         </p>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-lg font-bold text-green-600">
-                          ₹{product.selling_price}
-                        </span>
+                        {product.optional_fields && (
+                          <div className="flex flex-wrap gap-1 ml-3">
+                            {Object.entries(product.optional_fields).map(([key, value]) => (
+                              <span key={key} className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">
+                                {key}: {value}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
-                    
-                    {product.optional_fields && (
-                      <div className="mb-3">
-                        <div className="flex flex-wrap gap-1">
-                          {Object.entries(product.optional_fields).map(([key, value]) => (
-                            <span key={key} className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
-                              {key}: {value}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    <button
-                      onClick={() => handleAddToCart(product)}
-                      className="w-full btn btn-primary"
-                    >
-                      Add to Cart
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg font-semibold text-green-600 min-w-[80px] text-right">
+                        ₹{product.selling_price}
+                      </span>
+                      <button
+                        onClick={() => handleAddToCart(product)}
+                        className="btn btn-sm btn-primary whitespace-nowrap"
+                      >
+                        Add to Cart
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                ))}
+                {filteredProducts.length === 0 && (
+                  <div className="p-4 text-center text-gray-500">
+                    No products found
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -454,18 +456,19 @@ const Sales = () => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  School
+                  School *
                 </label>
                 <select
                   className="input"
                   required
-                  value={selectedSchool?.id || ''}
+                  value={selectedSchool ? selectedSchool.id : selectedSchool === null ? 'direct' : ''}
                   onChange={(e) => {
-                    const school = schools.find(s => s.id === e.target.value)
-                    dispatch(setSelectedSchool(school || null))
+                    const school = e.target.value === 'direct' ? null : schools.find(s => s.id === e.target.value)
+                    dispatch(setSelectedSchool(school))
                   }}
                 >
-                  <option value="">None (Direct Sale)</option>
+                  <option value="">Select School</option>
+                  <option value="direct">Direct Sale</option>
                   {schools.map((school) => (
                     <option key={school.id} value={school.id}>
                       {school.name}
