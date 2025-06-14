@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { Plus, Minus, ShoppingCart, Trash2, Search, DollarSign, Percent, Printer, Save } from 'lucide-react'
+import { Plus, Minus, ShoppingCart, Trash2, Search, DollarSign, Percent, Printer, Save, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { fetchProducts } from '../store/slices/productsSlice'
 import { fetchSchools } from '../store/slices/schoolsSlice'
@@ -24,6 +24,11 @@ const Sales = () => {
   const [loading, setLoading] = useState(false)
   const [amountPaid, setAmountPaid] = useState('')
   const [commissionRates, setCommissionRates] = useState({})
+  
+  // Length-based product modal
+  const [showQuantityModal, setShowQuantityModal] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState(null)
+  const [customQuantity, setCustomQuantity] = useState('')
 
   const cartTotal = cart.reduce((total, item) => 
     total + (item.product.selling_price * item.quantity), 0
@@ -82,6 +87,14 @@ const Sales = () => {
   const profit = parseFloat(amountPaid || 0) - cartCost - cartCommission
 
   const handleAddToCart = (product, quantity = 1) => {
+    // Check if it's a length-based product
+    if (product.optional_fields?.is_length_based) {
+      setSelectedProduct(product)
+      setCustomQuantity('')
+      setShowQuantityModal(true)
+      return
+    }
+    
     if (product.stock_quantity < quantity) {
       toast('Low stock: Only ' + product.stock_quantity + ' items available', {
         icon: '⚠️',
@@ -94,6 +107,28 @@ const Sales = () => {
     }
     dispatch(addToCart({ product, quantity }))
     toast.success(`${product.name} added to cart`)
+  }
+
+  const handleLengthBasedAddToCart = () => {
+    if (!selectedProduct || !customQuantity) {
+      toast.error('Please enter a valid quantity')
+      return
+    }
+
+    const quantity = parseFloat(customQuantity)
+    const minQuantity = parseFloat(selectedProduct.optional_fields?.min_quantity || 0.1)
+    
+    if (quantity < minQuantity) {
+      toast.error(`Minimum quantity is ${minQuantity} ${selectedProduct.optional_fields?.unit_name || 'units'}`)
+      return
+    }
+
+    dispatch(addToCart({ product: selectedProduct, quantity }))
+    toast.success(`${quantity} ${selectedProduct.optional_fields?.unit_name || 'units'} of ${selectedProduct.name} added to cart`)
+    
+    setShowQuantityModal(false)
+    setSelectedProduct(null)
+    setCustomQuantity('')
   }
 
   const handleUpdateQuantity = (productId, newQuantity) => {
@@ -395,30 +430,38 @@ const Sales = () => {
                     <div className="flex-1 min-w-0 mr-4">
                       <h3 className="font-medium text-gray-900">{product.name}</h3>
                       <div className="flex items-center mt-1">
-                        <p className={`text-sm ${product.stock_quantity < 0 ? 'text-red-500' : 'text-gray-500'}`}>
-                          Stock: {product.stock_quantity}
-                          {product.stock_quantity < 0 && ' (Warning: Negative Stock)'}
-                        </p>
+                        {product.optional_fields?.is_length_based ? (
+                          <p className="text-sm text-blue-600">
+                            Length-based • Min: {product.optional_fields?.min_quantity || 0.1} {product.optional_fields?.unit_name || 'unit'}
+                          </p>
+                        ) : (
+                          <p className={`text-sm ${product.stock_quantity < 0 ? 'text-red-500' : 'text-gray-500'}`}>
+                            Stock: {product.stock_quantity}
+                            {product.stock_quantity < 0 && ' (Warning: Negative Stock)'}
+                          </p>
+                        )}
                         {product.optional_fields && (
                           <div className="flex flex-wrap gap-1 ml-3">
-                            {Object.entries(product.optional_fields).map(([key, value]) => (
-                              <span key={key} className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">
-                                {key}: {value}
-                              </span>
-                            ))}
+                            {Object.entries(product.optional_fields)
+                              .filter(([key]) => !['is_length_based', 'rate_per_unit', 'unit_name', 'min_quantity'].includes(key))
+                              .map(([key, value]) => (
+                                <span key={key} className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">
+                                  {key}: {value}
+                                </span>
+                              ))}
                           </div>
                         )}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-lg font-semibold text-green-600 min-w-[80px] text-right">
-                        ₹{product.selling_price}
+                        ₹{product.selling_price}{product.optional_fields?.is_length_based ? `/${product.optional_fields?.unit_name || 'unit'}` : ''}
                       </span>
                       <button
                         onClick={() => handleAddToCart(product)}
                         className="btn btn-sm btn-primary whitespace-nowrap"
                       >
-                        Add to Cart
+                        {product.optional_fields?.is_length_based ? 'Select Qty' : 'Add to Cart'}
                       </button>
                     </div>
                   </div>
@@ -493,27 +536,34 @@ const Sales = () => {
               ) : (
                 <div className="space-y-4">
                   {cart.map((item) => {
+                    const isLengthBased = item.product.optional_fields?.is_length_based
+                    const unitName = item.product.optional_fields?.unit_name || 'unit'
+                    const minQuantity = parseFloat(item.product.optional_fields?.min_quantity || 0.1)
+                    
                     return (
                       <div key={item.product.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div className="flex-1">
                           <p className="font-medium text-gray-900">{item.product.name}</p>
                           <p className="text-sm text-gray-500">
-                            ₹{item.product.selling_price} each
+                            ₹{item.product.selling_price} {isLengthBased ? `per ${unitName}` : 'each'}
                           </p>
                         </div>
                         
                         <div className="flex items-center space-x-2">
                           <button
-                            onClick={() => handleUpdateQuantity(item.product.id, item.quantity - 1)}
+                            onClick={() => handleUpdateQuantity(item.product.id, isLengthBased ? Math.max(minQuantity, item.quantity - minQuantity) : item.quantity - 1)}
                             className="p-1 text-gray-500 hover:text-gray-700"
                           >
                             <Minus className="w-4 h-4" />
                           </button>
                           
-                          <span className="w-8 text-center font-medium">{item.quantity}</span>
+                          <span className="w-12 text-center font-medium">
+                            {isLengthBased ? item.quantity.toFixed(2) : item.quantity}
+                            {isLengthBased && <span className="text-xs text-gray-500 block">{unitName}</span>}
+                          </span>
                           
                           <button
-                            onClick={() => handleUpdateQuantity(item.product.id, item.quantity + 1)}
+                            onClick={() => handleUpdateQuantity(item.product.id, isLengthBased ? item.quantity + minQuantity : item.quantity + 1)}
                             className="p-1 text-gray-500 hover:text-gray-700"
                           >
                             <Plus className="w-4 h-4" />
@@ -616,6 +666,85 @@ const Sales = () => {
           </div>
         </div>
       </div>
+
+      {/* Quantity Modal for Length-Based Products */}
+      {showQuantityModal && selectedProduct && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowQuantityModal(false)}></div>
+            
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Select Quantity</h3>
+                  <button
+                    onClick={() => setShowQuantityModal(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="bg-blue-50 p-3 rounded-lg">
+                    <p className="font-medium text-blue-900">{selectedProduct.name}</p>
+                    <p className="text-sm text-blue-700">
+                      Rate: ₹{selectedProduct.selling_price} per {selectedProduct.optional_fields?.unit_name || 'unit'}
+                    </p>
+                    <p className="text-xs text-blue-600">
+                      Minimum quantity: {selectedProduct.optional_fields?.min_quantity || 0.1} {selectedProduct.optional_fields?.unit_name || 'units'}
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Quantity ({selectedProduct.optional_fields?.unit_name || 'units'}) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min={selectedProduct.optional_fields?.min_quantity || 0.1}
+                      className="input"
+                      value={customQuantity}
+                      onChange={(e) => setCustomQuantity(e.target.value)}
+                      placeholder={`Enter quantity (min: ${selectedProduct.optional_fields?.min_quantity || 0.1})`}
+                      autoFocus
+                    />
+                  </div>
+                  
+                  {customQuantity && (
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <p className="text-sm text-gray-700">
+                        <span className="font-medium">Total: </span>
+                        {customQuantity} {selectedProduct.optional_fields?.unit_name || 'units'} × ₹{selectedProduct.selling_price} = 
+                        <span className="font-semibold text-green-600 ml-1">
+                          ₹{(parseFloat(customQuantity || 0) * selectedProduct.selling_price).toFixed(2)}
+                        </span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button
+                  onClick={handleLengthBasedAddToCart}
+                  disabled={!customQuantity || parseFloat(customQuantity) < parseFloat(selectedProduct.optional_fields?.min_quantity || 0.1)}
+                  className="w-full inline-flex justify-center btn btn-primary sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
+                >
+                  Add to Cart
+                </button>
+                <button
+                  onClick={() => setShowQuantityModal(false)}
+                  className="mt-3 w-full inline-flex justify-center btn btn-secondary sm:mt-0 sm:w-auto sm:text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

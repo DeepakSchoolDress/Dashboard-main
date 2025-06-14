@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { Plus, Edit, Trash2, Search, Edit2, AlertCircle, AlertTriangle, Eraser } from 'lucide-react'
+import { Plus, Edit, Trash2, Search, Edit2, AlertCircle, AlertTriangle, Eraser, Copy, Ruler } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { fetchProducts, createProduct, updateProduct, deleteProduct } from '../store/slices/productsSlice'
 import { fetchSchools } from '../store/slices/schoolsSlice'
@@ -24,13 +24,32 @@ const Products = () => {
   const [erasePassword, setErasePassword] = useState('')
   const [deletingAll, setDeletingAll] = useState(false)
   const [erasingAll, setErasingAll] = useState(false)
+  
+  // Product creation mode
+  const [creationMode, setCreationMode] = useState('single') // 'single', 'bulk_sizes', 'length_based'
+  const [creating, setCreating] = useState(false)
+  
   const [formData, setFormData] = useState({
     name: '',
     cost_price: '',
     selling_price: '',
     stock_quantity: '',
     school_id: '',
-    optional_fields: {}
+    optional_fields: {},
+    // Bulk sizes fields
+    base_name: '',
+    size_start: '',
+    size_end: '',
+    size_increment: '',
+    base_cost_price: '',
+    base_selling_price: '',
+    price_increment: '',
+    base_stock: '',
+    // Length-based fields
+    is_length_based: false,
+    rate_per_unit: '',
+    unit_name: 'meter', // meter, yard, feet, etc.
+    min_quantity: '0.1'
   })
 
   useEffect(() => {
@@ -44,7 +63,42 @@ const Products = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    setCreating(true)
     
+    try {
+      if (editingProduct) {
+        // Regular edit mode
+        const productData = {
+          ...formData,
+          cost_price: parseFloat(formData.cost_price),
+          selling_price: parseFloat(formData.selling_price),
+          stock_quantity: parseInt(formData.stock_quantity),
+          school_id: formData.school_id || null,
+        }
+        
+        await dispatch(updateProduct({ id: editingProduct.id, ...productData })).unwrap()
+        toast.success('Product updated successfully')
+      } else {
+        // Creation mode
+        if (creationMode === 'single') {
+          await handleSingleProductCreation()
+        } else if (creationMode === 'bulk_sizes') {
+          await handleBulkSizesCreation()
+        } else if (creationMode === 'length_based') {
+          await handleLengthBasedCreation()
+        }
+      }
+      
+      setShowModal(false)
+      resetForm()
+    } catch (error) {
+      toast.error(error || 'Operation failed')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleSingleProductCreation = async () => {
     const productData = {
       ...formData,
       cost_price: parseFloat(formData.cost_price),
@@ -53,20 +107,101 @@ const Products = () => {
       school_id: formData.school_id || null,
     }
 
-    try {
-      if (editingProduct) {
-        await dispatch(updateProduct({ id: editingProduct.id, ...productData })).unwrap()
-        toast.success('Product updated successfully')
-      } else {
-        await dispatch(createProduct(productData)).unwrap()
-        toast.success('Product created successfully')
-      }
-      
-      setShowModal(false)
-      resetForm()
-    } catch (error) {
-      toast.error(error || 'Operation failed')
+    await dispatch(createProduct(productData)).unwrap()
+    toast.success('Product created successfully')
+  }
+
+  const handleBulkSizesCreation = async () => {
+    const {
+      base_name,
+      size_start,
+      size_end,
+      size_increment,
+      base_cost_price,
+      base_selling_price,
+      price_increment,
+      base_stock,
+      school_id
+    } = formData
+
+    // Validation
+    if (!base_name || !size_start || !size_end || !size_increment || !base_cost_price || !base_selling_price) {
+      throw new Error('Please fill all required fields for bulk creation')
     }
+
+    const startSize = parseFloat(size_start)
+    const endSize = parseFloat(size_end)
+    const increment = parseFloat(size_increment)
+    const baseCost = parseFloat(base_cost_price)
+    const basePrice = parseFloat(base_selling_price)
+    const priceInc = parseFloat(price_increment || 0)
+    const stock = parseInt(base_stock || 0)
+
+    if (startSize >= endSize) {
+      throw new Error('Start size must be less than end size')
+    }
+
+    const products = []
+    let currentSize = startSize
+    let sizeIndex = 0
+
+    while (currentSize <= endSize) {
+      const costPrice = baseCost + (priceInc * sizeIndex)
+      const sellingPrice = basePrice + (priceInc * sizeIndex)
+      
+      products.push({
+        name: `${base_name} - Size ${currentSize}`,
+        cost_price: costPrice,
+        selling_price: sellingPrice,
+        stock_quantity: stock,
+        school_id: school_id || null,
+        optional_fields: {
+          size: currentSize.toString(),
+          base_product: base_name
+        }
+      })
+
+      currentSize = Math.round((currentSize + increment) * 100) / 100 // Avoid floating point issues
+      sizeIndex++
+    }
+
+    // Create all products
+    for (const product of products) {
+      await dispatch(createProduct(product)).unwrap()
+    }
+
+    toast.success(`Created ${products.length} size variations successfully!`)
+  }
+
+  const handleLengthBasedCreation = async () => {
+    const {
+      name,
+      rate_per_unit,
+      unit_name,
+      min_quantity,
+      school_id
+    } = formData
+
+    if (!name || !rate_per_unit) {
+      throw new Error('Please fill all required fields for length-based product')
+    }
+
+    const productData = {
+      name: `${name} (per ${unit_name})`,
+      cost_price: 0, // Will be calculated dynamically
+      selling_price: parseFloat(rate_per_unit),
+      stock_quantity: 999999, // Large number for length-based products
+      school_id: school_id || null,
+      optional_fields: {
+        is_length_based: true,
+        rate_per_unit: parseFloat(rate_per_unit),
+        unit_name: unit_name,
+        min_quantity: parseFloat(min_quantity)
+      }
+    }
+
+    await dispatch(createProduct(productData)).unwrap()
+    toast.success('Length-based product created successfully!')
   }
 
   const handleEdit = (product) => {
@@ -77,7 +212,21 @@ const Products = () => {
       selling_price: product.selling_price.toString(),
       stock_quantity: product.stock_quantity.toString(),
       school_id: product.school_id || '',
-      optional_fields: product.optional_fields || {}
+      optional_fields: product.optional_fields || {},
+      // Bulk sizes fields
+      base_name: product.base_name || '',
+      size_start: product.size_start || '',
+      size_end: product.size_end || '',
+      size_increment: product.size_increment || '',
+      base_cost_price: product.base_cost_price || '',
+      base_selling_price: product.base_selling_price || '',
+      price_increment: product.price_increment || '',
+      base_stock: product.base_stock || '',
+      // Length-based fields
+      is_length_based: product.is_length_based || false,
+      rate_per_unit: product.rate_per_unit || '',
+      unit_name: product.unit_name || 'meter',
+      min_quantity: product.min_quantity || '0.1'
     })
     setShowModal(true)
   }
@@ -250,14 +399,56 @@ const Products = () => {
       selling_price: '',
       stock_quantity: '',
       school_id: '',
-      optional_fields: {}
+      optional_fields: {},
+      // Bulk sizes fields
+      base_name: '',
+      size_start: '',
+      size_end: '',
+      size_increment: '',
+      base_cost_price: '',
+      base_selling_price: '',
+      price_increment: '',
+      base_stock: '',
+      // Length-based fields
+      is_length_based: false,
+      rate_per_unit: '',
+      unit_name: 'meter',
+      min_quantity: '0.1'
     })
     setEditingProduct(null)
+    setCreationMode('single')
   }
 
   const handleModalClose = () => {
     setShowModal(false)
     resetForm()
+  }
+
+  const openAddModal = (mode = 'single') => {
+    setCreationMode(mode)
+    setFormData({
+      name: '',
+      cost_price: '',
+      selling_price: '',
+      stock_quantity: '',
+      school_id: '',
+      optional_fields: {},
+      // Bulk sizes fields
+      base_name: '',
+      size_start: '',
+      size_end: '',
+      size_increment: '',
+      base_cost_price: '',
+      base_selling_price: '',
+      price_increment: '',
+      base_stock: '',
+      // Length-based fields
+      is_length_based: false,
+      rate_per_unit: '',
+      unit_name: 'meter',
+      min_quantity: '0.1'
+    })
+    setShowModal(true)
   }
 
   return (
@@ -284,17 +475,21 @@ const Products = () => {
             Delete All
           </button>
           <button
-            onClick={() => {
-              setFormData({
-                name: '',
-                cost_price: '',
-                selling_price: '',
-                stock_quantity: '',
-                school_id: '',
-                optional_fields: {}
-              })
-              setShowModal(true)
-            }}
+            onClick={() => openAddModal('length_based')}
+            className="btn btn-secondary"
+          >
+            <Ruler className="w-5 h-5 mr-2" />
+            Length Product
+          </button>
+          <button
+            onClick={() => openAddModal('bulk_sizes')}
+            className="btn btn-secondary"
+          >
+            <Copy className="w-5 h-5 mr-2" />
+            Bulk Sizes
+          </button>
+          <button
+            onClick={() => openAddModal()}
             className="btn btn-primary"
           >
             <Plus className="w-5 h-5 mr-2" />
@@ -573,67 +768,371 @@ const Products = () => {
             <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
               <form onSubmit={handleSubmit}>
                 <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">
-                    {editingProduct ? 'Edit Product' : 'Add New Product'}
-                  </h3>
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-medium text-gray-900">
+                      {editingProduct ? 'Edit Product' : 
+                       creationMode === 'single' ? 'Add New Product' :
+                       creationMode === 'bulk_sizes' ? 'Create Bulk Size Variations' :
+                       'Create Length-Based Product'}
+                    </h3>
+                    {!editingProduct && (
+                      <div className="flex space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => setCreationMode('single')}
+                          className={`px-3 py-1 text-xs rounded ${creationMode === 'single' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600'}`}
+                        >
+                          Single
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCreationMode('bulk_sizes')}
+                          className={`px-3 py-1 text-xs rounded ${creationMode === 'bulk_sizes' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600'}`}
+                        >
+                          Bulk Sizes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCreationMode('length_based')}
+                          className={`px-3 py-1 text-xs rounded ${creationMode === 'length_based' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600'}`}
+                        >
+                          Length-Based
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   
                   <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Product Name *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        className="input"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      />
-                    </div>
+                    {/* Single Product Mode */}
+                    {(editingProduct || creationMode === 'single') && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Product Name *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            className="input"
+                            value={formData.name}
+                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          />
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Cost Price *
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              required
+                              className="input"
+                              value={formData.cost_price}
+                              onChange={(e) => setFormData({ ...formData, cost_price: e.target.value })}
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Selling Price *
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              required
+                              className="input"
+                              value={formData.selling_price}
+                              onChange={(e) => setFormData({ ...formData, selling_price: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Stock Quantity *
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            className="input"
+                            value={formData.stock_quantity}
+                            onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {/* Bulk Sizes Mode */}
+                    {!editingProduct && creationMode === 'bulk_sizes' && (
+                      <>
+                        <div className="bg-blue-50 p-3 rounded-lg">
+                          <p className="text-sm text-blue-800 font-medium">Bulk Size Creation</p>
+                          <p className="text-xs text-blue-600 mt-1">
+                            Example: Blue T-shirt sizes 20-42 with ₹10 increment, starting at ₹120
+                          </p>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Base Product Name *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            className="input"
+                            value={formData.base_name}
+                            onChange={(e) => setFormData({ ...formData, base_name: e.target.value })}
+                            placeholder="e.g., Blue T-shirt"
+                          />
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Start Size *
+                            </label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              required
+                              className="input"
+                              value={formData.size_start}
+                              onChange={(e) => setFormData({ ...formData, size_start: e.target.value })}
+                              placeholder="20"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              End Size *
+                            </label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              required
+                              className="input"
+                              value={formData.size_end}
+                              onChange={(e) => setFormData({ ...formData, size_end: e.target.value })}
+                              placeholder="42"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Size Increment *
+                            </label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              required
+                              className="input"
+                              value={formData.size_increment}
+                              onChange={(e) => setFormData({ ...formData, size_increment: e.target.value })}
+                              placeholder="2"
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Base Cost Price *
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              required
+                              className="input"
+                              value={formData.base_cost_price}
+                              onChange={(e) => setFormData({ ...formData, base_cost_price: e.target.value })}
+                              placeholder="100"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Base Selling Price *
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              required
+                              className="input"
+                              value={formData.base_selling_price}
+                              onChange={(e) => setFormData({ ...formData, base_selling_price: e.target.value })}
+                              placeholder="120"
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Price Increment per Size
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              className="input"
+                              value={formData.price_increment}
+                              onChange={(e) => setFormData({ ...formData, price_increment: e.target.value })}
+                              placeholder="10"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Leave empty for same price</p>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Stock per Size
+                            </label>
+                            <input
+                              type="number"
+                              className="input"
+                              value={formData.base_stock}
+                              onChange={(e) => setFormData({ ...formData, base_stock: e.target.value })}
+                              placeholder="10"
+                            />
+                          </div>
+                        </div>
+                        
+                        {/* Preview */}
+                        {formData.base_name && formData.size_start && formData.size_end && formData.size_increment && (
+                          <div className="bg-gray-50 p-3 rounded-lg">
+                            <p className="text-sm font-medium text-gray-700 mb-2">Preview:</p>
+                            <div className="text-xs text-gray-600 space-y-1">
+                              {(() => {
+                                const start = parseFloat(formData.size_start)
+                                const end = parseFloat(formData.size_end)
+                                const increment = parseFloat(formData.size_increment)
+                                const basePrice = parseFloat(formData.base_selling_price || 0)
+                                const priceInc = parseFloat(formData.price_increment || 0)
+                                
+                                if (start && end && increment && start < end) {
+                                  const products = []
+                                  let currentSize = start
+                                  let sizeIndex = 0
+                                  
+                                  while (currentSize <= end && products.length < 5) {
+                                    const price = basePrice + (priceInc * sizeIndex)
+                                    products.push(`${formData.base_name} - Size ${currentSize} (₹${price.toFixed(2)})`)
+                                    currentSize = Math.round((currentSize + increment) * 100) / 100
+                                    sizeIndex++
+                                  }
+                                  
+                                  const totalCount = Math.floor((end - start) / increment) + 1
+                                  
+                                  return (
+                                    <>
+                                      {products.map((product, index) => (
+                                        <div key={index}>• {product}</div>
+                                      ))}
+                                      {totalCount > 5 && <div>... and {totalCount - 5} more</div>}
+                                      <div className="font-medium mt-2">Total: {totalCount} products</div>
+                                    </>
+                                  )
+                                }
+                                return null
+                              })()}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* Length-Based Mode */}
+                    {!editingProduct && creationMode === 'length_based' && (
+                      <>
+                        <div className="bg-green-50 p-3 rounded-lg">
+                          <p className="text-sm text-green-800 font-medium">Length-Based Product</p>
+                          <p className="text-xs text-green-600 mt-1">
+                            For products sold by measurement (fabric, rope, etc.)
+                          </p>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Product Name *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            className="input"
+                            value={formData.name}
+                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                            placeholder="e.g., Cotton Fabric"
+                          />
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Rate per Unit *
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              required
+                              className="input"
+                              value={formData.rate_per_unit}
+                              onChange={(e) => setFormData({ ...formData, rate_per_unit: e.target.value })}
+                              placeholder="50"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Unit Type
+                            </label>
+                            <select
+                              className="input"
+                              value={formData.unit_name}
+                              onChange={(e) => setFormData({ ...formData, unit_name: e.target.value })}
+                            >
+                              <option value="meter">Meter</option>
+                              <option value="yard">Yard</option>
+                              <option value="feet">Feet</option>
+                              <option value="inch">Inch</option>
+                              <option value="kg">Kilogram</option>
+                              <option value="piece">Piece</option>
+                            </select>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Minimum Quantity
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            className="input"
+                            value={formData.min_quantity}
+                            onChange={(e) => setFormData({ ...formData, min_quantity: e.target.value })}
+                            placeholder="0.1"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Minimum quantity that can be sold</p>
+                        </div>
+                        
+                        {/* Preview */}
+                        {formData.name && formData.rate_per_unit && (
+                          <div className="bg-gray-50 p-3 rounded-lg">
+                            <p className="text-sm font-medium text-gray-700 mb-2">Preview:</p>
+                            <div className="text-xs text-gray-600">
+                              <div>Product: {formData.name} (per {formData.unit_name})</div>
+                              <div>Rate: ₹{formData.rate_per_unit} per {formData.unit_name}</div>
+                              <div>Min. Qty: {formData.min_quantity} {formData.unit_name}</div>
+                              <div className="mt-2 font-medium">
+                                Example: 2.5 {formData.unit_name} = ₹{(parseFloat(formData.rate_per_unit || 0) * 2.5).toFixed(2)}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
                     
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Cost Price *
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          required
-                          className="input"
-                          value={formData.cost_price}
-                          onChange={(e) => setFormData({ ...formData, cost_price: e.target.value })}
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Selling Price *
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          required
-                          className="input"
-                          value={formData.selling_price}
-                          onChange={(e) => setFormData({ ...formData, selling_price: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Stock Quantity *
-                      </label>
-                      <input
-                        type="number"
-                        required
-                        className="input"
-                        value={formData.stock_quantity}
-                        onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
-                      />
-                    </div>
-                    
+                    {/* Common School Selection */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Associated School
@@ -657,14 +1156,20 @@ const Products = () => {
                 <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
                   <button
                     type="submit"
-                    className="w-full inline-flex justify-center btn btn-primary sm:ml-3 sm:w-auto sm:text-sm"
+                    disabled={creating}
+                    className="w-full inline-flex justify-center btn btn-primary sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
                   >
-                    {editingProduct ? 'Update' : 'Create'}
+                    {creating ? 'Creating...' : 
+                     editingProduct ? 'Update' : 
+                     creationMode === 'bulk_sizes' ? 'Create All Sizes' :
+                     creationMode === 'length_based' ? 'Create Length Product' :
+                     'Create'}
                   </button>
                   <button
                     type="button"
                     onClick={handleModalClose}
-                    className="mt-3 w-full inline-flex justify-center btn btn-secondary sm:mt-0 sm:w-auto sm:text-sm"
+                    disabled={creating}
+                    className="mt-3 w-full inline-flex justify-center btn btn-secondary sm:mt-0 sm:w-auto sm:text-sm disabled:opacity-50"
                   >
                     Cancel
                   </button>
