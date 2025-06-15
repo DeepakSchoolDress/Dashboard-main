@@ -117,9 +117,15 @@ const Sales = () => {
 
     const quantity = parseFloat(customQuantity)
     const minQuantity = parseFloat(selectedProduct.optional_fields?.min_quantity || 0.1)
+    const stockAvailable = parseFloat(selectedProduct.stock_quantity)
     
     if (quantity < minQuantity) {
       toast.error(`Minimum quantity is ${minQuantity} ${selectedProduct.optional_fields?.unit_name || 'units'}`)
+      return
+    }
+
+    if (quantity > stockAvailable) {
+      toast.error(`Only ${stockAvailable} ${selectedProduct.optional_fields?.unit_name || 'units'} available in stock`)
       return
     }
 
@@ -287,8 +293,8 @@ const Sales = () => {
     
     // Build plain text receipt
     let receipt = ''
-    receipt += '        DEEPAK SCHOOL DRESS\n'
-    receipt += '       CHOWK BAZAAR KAIRANA\n'
+    receipt += '        Estimate\n'
+    receipt += '        \n'
     receipt += '================================\n'
     receipt += `Bill No: ${sale.bill_number || 'N/A'}\n`
     receipt += `Date: ${formattedDate} ${formattedTime}\n`
@@ -432,7 +438,7 @@ const Sales = () => {
                       <div className="flex items-center mt-1">
                         {product.optional_fields?.is_length_based ? (
                           <p className="text-sm text-blue-600">
-                            Length-based • Min: {product.optional_fields?.min_quantity || 0.1} {product.optional_fields?.unit_name || 'unit'}
+                            Length-based • Stock: {product.stock_quantity} {product.optional_fields?.unit_name || 'unit'}
                           </p>
                         ) : (
                           <p className={`text-sm ${product.stock_quantity < 0 ? 'text-red-500' : 'text-gray-500'}`}>
@@ -692,7 +698,7 @@ const Sales = () => {
                       Rate: ₹{selectedProduct.selling_price} per {selectedProduct.optional_fields?.unit_name || 'unit'}
                     </p>
                     <p className="text-xs text-blue-600">
-                      Minimum quantity: {selectedProduct.optional_fields?.min_quantity || 0.1} {selectedProduct.optional_fields?.unit_name || 'units'}
+                      Stock available: {selectedProduct.stock_quantity} {selectedProduct.optional_fields?.unit_name || 'units'}
                     </p>
                   </div>
                   
@@ -704,6 +710,7 @@ const Sales = () => {
                       type="number"
                       step="0.01"
                       min={selectedProduct.optional_fields?.min_quantity || 0.1}
+                      max={selectedProduct.stock_quantity}
                       className="input"
                       value={customQuantity}
                       onChange={(e) => setCustomQuantity(e.target.value)}
@@ -729,7 +736,9 @@ const Sales = () => {
               <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
                 <button
                   onClick={handleLengthBasedAddToCart}
-                  disabled={!customQuantity || parseFloat(customQuantity) < parseFloat(selectedProduct.optional_fields?.min_quantity || 0.1)}
+                  disabled={!customQuantity || 
+                           parseFloat(customQuantity) < parseFloat(selectedProduct.optional_fields?.min_quantity || 0.1) ||
+                           parseFloat(customQuantity) > parseFloat(selectedProduct.stock_quantity)}
                   className="w-full inline-flex justify-center btn btn-primary sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
                 >
                   Add to Cart

@@ -69,11 +69,12 @@ const Products = () => {
       if (editingProduct) {
         // Regular edit mode
         const productData = {
-          ...formData,
+          name: formData.name,
           cost_price: parseFloat(formData.cost_price),
           selling_price: parseFloat(formData.selling_price),
           stock_quantity: parseInt(formData.stock_quantity),
           school_id: formData.school_id || null,
+          optional_fields: formData.optional_fields || {}
         }
         
         await dispatch(updateProduct({ id: editingProduct.id, ...productData })).unwrap()
@@ -100,11 +101,12 @@ const Products = () => {
 
   const handleSingleProductCreation = async () => {
     const productData = {
-      ...formData,
+      name: formData.name,
       cost_price: parseFloat(formData.cost_price),
       selling_price: parseFloat(formData.selling_price),
       stock_quantity: parseInt(formData.stock_quantity),
       school_id: formData.school_id || null,
+      optional_fields: formData.optional_fields || {}
     }
 
     await dispatch(createProduct(productData)).unwrap()
@@ -190,13 +192,13 @@ const Products = () => {
       name: `${name} (per ${unit_name})`,
       cost_price: 0, // Will be calculated dynamically
       selling_price: parseFloat(rate_per_unit),
-      stock_quantity: 999999, // Large number for length-based products
+      stock_quantity: parseFloat(min_quantity) || 999999, // Use the entered stock amount
       school_id: school_id || null,
       optional_fields: {
         is_length_based: true,
         rate_per_unit: parseFloat(rate_per_unit),
         unit_name: unit_name,
-        min_quantity: parseFloat(min_quantity)
+        min_quantity: 0.1 // Set a small minimum purchase quantity
       }
     }
 
@@ -1102,7 +1104,7 @@ const Products = () => {
                         
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Minimum Quantity
+                            Amount in Stock
                           </label>
                           <input
                             type="number"
@@ -1110,9 +1112,9 @@ const Products = () => {
                             className="input"
                             value={formData.min_quantity}
                             onChange={(e) => setFormData({ ...formData, min_quantity: e.target.value })}
-                            placeholder="0.1"
+                            placeholder="100"
                           />
-                          <p className="text-xs text-gray-500 mt-1">Minimum quantity that can be sold</p>
+                          <p className="text-xs text-gray-500 mt-1">Total amount available in stock</p>
                         </div>
                         
                         {/* Preview */}
@@ -1122,7 +1124,7 @@ const Products = () => {
                             <div className="text-xs text-gray-600">
                               <div>Product: {formData.name} (per {formData.unit_name})</div>
                               <div>Rate: ₹{formData.rate_per_unit} per {formData.unit_name}</div>
-                              <div>Min. Qty: {formData.min_quantity} {formData.unit_name}</div>
+                              <div>Stock: {formData.min_quantity} {formData.unit_name}</div>
                               <div className="mt-2 font-medium">
                                 Example: 2.5 {formData.unit_name} = ₹{(parseFloat(formData.rate_per_unit || 0) * 2.5).toFixed(2)}
                               </div>
