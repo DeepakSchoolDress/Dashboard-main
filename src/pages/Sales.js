@@ -311,8 +311,7 @@ const Sales = () => {
     
     // Build plain text receipt
     let receipt = ''
-    receipt += '        Estimate\n'
-    receipt += '        \n'
+    receipt += '        ESTIMATE\n'
     receipt += '================================\n'
     receipt += `Bill No: ${sale.bill_number || 'N/A'}\n`
     receipt += `Date: ${formattedDate} ${formattedTime}\n`
@@ -361,11 +360,12 @@ const Sales = () => {
         <title>Receipt</title>
         <style>
           body {
-            font-family: 'Courier New', monospace;
-            font-size: 14.5px;
+            font-family: 'Courier New', 'Lucida Console', monospace;
+            font-size: 13px;
             font-weight: bold;
-            line-height: 1.3;
-            margin: 10px;
+            line-height: 1.2;
+            margin: 5px;
+            padding: 0;
             white-space: pre-wrap;
             background: white;
             color: #000000;
@@ -374,21 +374,22 @@ const Sales = () => {
           }
           
           .receipt-content {
-            filter: contrast(250%) brightness(0.7);
+            filter: contrast(200%) brightness(0.8);
             font-weight: 900;
           }
           
           @media print {
             body { 
               margin: 0; 
-              font-size: 12.5px;
+              padding: 0;
+              font-size: 12px;
               font-weight: 900;
               color: #000000 !important;
             }
             
             .receipt-content {
-              filter: contrast(400%) brightness(0.4);
-              -webkit-filter: contrast(400%) brightness(0.4);
+              filter: contrast(300%) brightness(0.6);
+              -webkit-filter: contrast(300%) brightness(0.6);
             }
             
             * {
