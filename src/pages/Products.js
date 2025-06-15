@@ -29,12 +29,18 @@ const Products = () => {
   const [creationMode, setCreationMode] = useState('single') // 'single', 'bulk_sizes', 'length_based'
   const [creating, setCreating] = useState(false)
   
+  // Category system
+  const predefinedCategories = ['Toys', 'Cosmetics', 'Dress', 'Shoes', 'LunchBox & Bottles']
+  const [selectedCategories, setSelectedCategories] = useState([])
+  const [newCategory, setNewCategory] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
+  
   const [formData, setFormData] = useState({
     name: '',
     cost_price: '',
     selling_price: '',
     stock_quantity: '',
-    school_id: '',
+    categories: [],
     optional_fields: {},
     // Bulk sizes fields
     base_name: '',
@@ -57,9 +63,15 @@ const Products = () => {
     dispatch(fetchSchools())
   }, [dispatch])
 
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const filteredProducts = products.filter(product => {
+    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesCategory = !categoryFilter || 
+      (product.categories && product.categories.some(cat => 
+        cat.toLowerCase().includes(categoryFilter.toLowerCase())
+      ))
+    
+    return matchesSearch && matchesCategory
+  })
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -73,7 +85,7 @@ const Products = () => {
           cost_price: parseFloat(formData.cost_price),
           selling_price: parseFloat(formData.selling_price),
           stock_quantity: parseInt(formData.stock_quantity),
-          school_id: formData.school_id || null,
+          categories: formData.categories || [],
           optional_fields: formData.optional_fields || {}
         }
         
@@ -105,7 +117,7 @@ const Products = () => {
       cost_price: parseFloat(formData.cost_price),
       selling_price: parseFloat(formData.selling_price),
       stock_quantity: parseInt(formData.stock_quantity),
-      school_id: formData.school_id || null,
+      categories: formData.categories || [],
       optional_fields: formData.optional_fields || {}
     }
 
@@ -123,7 +135,7 @@ const Products = () => {
       base_selling_price,
       price_increment,
       base_stock,
-      school_id
+      categories
     } = formData
 
     // Validation
@@ -156,7 +168,7 @@ const Products = () => {
         cost_price: costPrice,
         selling_price: sellingPrice,
         stock_quantity: stock,
-        school_id: school_id || null,
+        categories: categories || [],
         optional_fields: {
           size: currentSize.toString(),
           base_product: base_name
@@ -181,7 +193,7 @@ const Products = () => {
       rate_per_unit,
       unit_name,
       min_quantity,
-      school_id
+      categories
     } = formData
 
     if (!name || !rate_per_unit) {
@@ -193,7 +205,7 @@ const Products = () => {
       cost_price: 0, // Will be calculated dynamically
       selling_price: parseFloat(rate_per_unit),
       stock_quantity: parseFloat(min_quantity) || 999999, // Use the entered stock amount
-      school_id: school_id || null,
+      categories: categories || [],
       optional_fields: {
         is_length_based: true,
         rate_per_unit: parseFloat(rate_per_unit),
@@ -213,7 +225,7 @@ const Products = () => {
       cost_price: product.cost_price.toString(),
       selling_price: product.selling_price.toString(),
       stock_quantity: product.stock_quantity.toString(),
-      school_id: product.school_id || '',
+      categories: product.categories || [],
       optional_fields: product.optional_fields || {},
       // Bulk sizes fields
       base_name: product.base_name || '',
@@ -400,7 +412,7 @@ const Products = () => {
       cost_price: '',
       selling_price: '',
       stock_quantity: '',
-      school_id: '',
+      categories: [],
       optional_fields: {},
       // Bulk sizes fields
       base_name: '',
@@ -419,6 +431,8 @@ const Products = () => {
     })
     setEditingProduct(null)
     setCreationMode('single')
+    setSelectedCategories([])
+    setNewCategory('')
   }
 
   const handleModalClose = () => {
@@ -433,7 +447,7 @@ const Products = () => {
       cost_price: '',
       selling_price: '',
       stock_quantity: '',
-      school_id: '',
+      categories: [],
       optional_fields: {},
       // Bulk sizes fields
       base_name: '',
@@ -450,7 +464,42 @@ const Products = () => {
       unit_name: 'meter',
       min_quantity: '0.1'
     })
+    setSelectedCategories([])
+    setNewCategory('')
     setShowModal(true)
+  }
+
+  // Category management functions
+  const addCategory = (category) => {
+    if (category && !formData.categories.includes(category) && formData.categories.length < 5) {
+      const updatedCategories = [...formData.categories, category]
+      setFormData({ ...formData, categories: updatedCategories })
+      setSelectedCategories(updatedCategories)
+    }
+  }
+
+  const removeCategory = (categoryToRemove) => {
+    const updatedCategories = formData.categories.filter(cat => cat !== categoryToRemove)
+    setFormData({ ...formData, categories: updatedCategories })
+    setSelectedCategories(updatedCategories)
+  }
+
+  const addNewCategory = () => {
+    if (newCategory.trim() && !formData.categories.includes(newCategory.trim()) && formData.categories.length < 5) {
+      addCategory(newCategory.trim())
+      setNewCategory('')
+    }
+  }
+
+  // Get all unique categories from products for filtering
+  const getAllCategories = () => {
+    const allCategories = new Set()
+    products.forEach(product => {
+      if (product.categories) {
+        product.categories.forEach(cat => allCategories.add(cat))
+      }
+    })
+    return Array.from(allCategories).sort()
   }
 
   return (
@@ -503,15 +552,31 @@ const Products = () => {
       {/* Search */}
       <div className="card">
         <div className="card-body">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search products..."
-              className="input pl-10"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder="Search products..."
+                className="input pl-10"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div>
+              <select
+                className="input"
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+              >
+                <option value="">All Categories</option>
+                {getAllCategories().map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </div>
@@ -536,7 +601,7 @@ const Products = () => {
                     <th>Cost Price</th>
                     <th>Selling Price</th>
                     <th>Stock</th>
-                    <th>School</th>
+                    <th>Categories</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
@@ -569,7 +634,19 @@ const Products = () => {
                           {product.stock_quantity}
                         </span>
                       </td>
-                      <td>{product.schools ? product.schools.name : '-'}</td>
+                      <td>
+                        <div className="flex flex-wrap gap-1">
+                          {product.categories && product.categories.length > 0 ? (
+                            product.categories.map((category) => (
+                              <span key={category} className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
+                                {category}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-gray-400 text-sm">No categories</span>
+                          )}
+                        </div>
+                      </td>
                       <td>
                         {!product.is_active && (
                           <span className="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-full">
@@ -1134,23 +1211,88 @@ const Products = () => {
                       </>
                     )}
                     
-                    {/* Common School Selection */}
+                    {/* Common Category Selection */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Associated School
+                        Categories (Max 5)
                       </label>
-                      <select
-                        className="input"
-                        value={formData.school_id}
-                        onChange={(e) => setFormData({ ...formData, school_id: e.target.value })}
-                      >
-                        <option value="">No specific school</option>
-                        {schools.map((school) => (
-                          <option key={school.id} value={school.id}>
-                            {school.name}
-                          </option>
-                        ))}
-                      </select>
+                      
+                      {/* Selected Categories */}
+                      {formData.categories.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {formData.categories.map((category) => (
+                            <span
+                              key={category}
+                              className="inline-flex items-center px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded-full"
+                            >
+                              {category}
+                              <button
+                                type="button"
+                                onClick={() => removeCategory(category)}
+                                className="ml-2 text-blue-600 hover:text-blue-800"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* Predefined Categories */}
+                      {formData.categories.length < 5 && (
+                        <div className="space-y-3">
+                          <div>
+                            <p className="text-sm text-gray-600 mb-2">Quick Add:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {predefinedCategories
+                                .filter(cat => !formData.categories.includes(cat))
+                                .map((category) => (
+                                  <button
+                                    key={category}
+                                    type="button"
+                                    onClick={() => addCategory(category)}
+                                    className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                                  >
+                                    + {category}
+                                  </button>
+                                ))}
+                            </div>
+                          </div>
+                          
+                          {/* Custom Category Input */}
+                          <div>
+                            <p className="text-sm text-gray-600 mb-2">Add Custom:</p>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                className="input flex-1"
+                                value={newCategory}
+                                onChange={(e) => setNewCategory(e.target.value)}
+                                placeholder="Enter custom category"
+                                maxLength={20}
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    addNewCategory()
+                                  }
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={addNewCategory}
+                                disabled={!newCategory.trim() || formData.categories.includes(newCategory.trim())}
+                                className="btn btn-sm btn-secondary disabled:opacity-50"
+                              >
+                                Add
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {formData.categories.length >= 5 && (
+                        <p className="text-sm text-orange-600">Maximum 5 categories allowed</p>
+                      )}
                     </div>
                   </div>
                 </div>

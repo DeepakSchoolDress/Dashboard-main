@@ -21,6 +21,7 @@ const Sales = () => {
   const { cart, selectedSchool, customerName } = useSelector(state => state.sales)
   
   const [searchTerm, setSearchTerm] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
   const [loading, setLoading] = useState(false)
   const [amountPaid, setAmountPaid] = useState('')
   const [commissionRates, setCommissionRates] = useState({})
@@ -79,9 +80,26 @@ const Sales = () => {
     setAmountPaid(cartTotal.toString())
   }, [cartTotal])
 
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const filteredProducts = products.filter(product => {
+    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesCategory = !categoryFilter || 
+      (product.categories && product.categories.some(cat => 
+        cat.toLowerCase().includes(categoryFilter.toLowerCase())
+      ))
+    
+    return matchesSearch && matchesCategory
+  })
+
+  // Get all unique categories from products for filtering
+  const getAllCategories = () => {
+    const allCategories = new Set()
+    products.forEach(product => {
+      if (product.categories) {
+        product.categories.forEach(cat => allCategories.add(cat))
+      }
+    })
+    return Array.from(allCategories).sort()
+  }
 
   const discount = cartTotal - parseFloat(amountPaid || 0)
   const profit = parseFloat(amountPaid || 0) - cartCost - cartCommission
@@ -414,15 +432,31 @@ const Sales = () => {
           {/* Search */}
           <div className="card">
             <div className="card-body">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="text"
-                  placeholder="Search products..."
-                  className="input pl-10"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <input
+                    type="text"
+                    placeholder="Search products..."
+                    className="input pl-10"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <select
+                    className="input"
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                  >
+                    <option value="">All Categories</option>
+                    {getAllCategories().map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
           </div>
@@ -445,6 +479,15 @@ const Sales = () => {
                             Stock: {product.stock_quantity}
                             {product.stock_quantity < 0 && ' (Warning: Negative Stock)'}
                           </p>
+                        )}
+                        {product.categories && product.categories.length > 0 && (
+                          <div className="flex flex-wrap gap-1 ml-3">
+                            {product.categories.map((category) => (
+                              <span key={category} className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-800 rounded">
+                                {category}
+                              </span>
+                            ))}
+                          </div>
                         )}
                         {product.optional_fields && (
                           <div className="flex flex-wrap gap-1 ml-3">

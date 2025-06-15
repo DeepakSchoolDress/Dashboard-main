@@ -8,13 +8,7 @@ export const fetchProducts = createAsyncThunk(
     try {
       const { data, error } = await supabase
         .from('products')
-        .select(`
-          *,
-          schools (
-            id,
-            name
-          )
-        `)
+        .select('*')
         .order('name')
 
       if (error) throw error
